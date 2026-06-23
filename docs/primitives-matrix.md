@@ -5,7 +5,7 @@ Tool-agnostic loop design: the **capability** is what matters, not the product n
 | Primitive | Job in the Loop | Grok Build TUI | Claude Code | Codex | Cursor | Windsurf |
 |-----------|-----------------|----------------|-------------|-------|--------|----------|
 | **Automations / Scheduling** | Discovery + triage on a cadence | `/loop [interval] <prompt>`, `scheduler_create` / `scheduler_list` / `scheduler_delete` (`recurring`, `durable`, `fireImmediately`), `monitor` for streaming events | `/loop`, scheduled tasks, cron, hooks, GitHub Actions | [Automations tab](https://developers.openai.com/codex/app/automations): project, prompt, cadence, environment; Triage inbox | Cloud Agents + **Automations** (cron, webhooks, Linear/GitHub/Slack triggers); foreground Agent chat for ad-hoc `/loop`-style prompts | Cascade **Workflows** (`/workflow-name`, manual invoke); pair with GitHub Actions or external cron for true scheduling |
-| **Run-until-done** | Keep working until a verifiable condition holds | Goal mode / explicit stopping conditions in loop prompts | `/goal` — separate model checks completion | `/goal` — pause/resume, verifiable stop condition | Agent mode + **hooks** (`.cursor/hooks.json`) for grind-until-green loops | Workflow steps with explicit verification checkpoints; **Memories** for cross-session continuity |
+| **Run-until-done** | Keep working until a verifiable condition holds | [`/goal`](https://github.com/cobusgreyling/goal-engineering) + `update_goal` — persistent objective across turns ([Goal Engineering](https://github.com/cobusgreyling/goal-engineering)) | `/goal` — separate model checks completion | `/goal` — pause/resume, verifiable stop condition | Agent mode + **hooks** (`.cursor/hooks.json`) for grind-until-green loops | Workflow steps with explicit verification checkpoints; **Memories** for cross-session continuity |
 | **Worktrees** | Safe parallel execution | Subagents with `isolation: "worktree"`, background tasks | `git worktree`, `--worktree`, `isolation: worktree` on subagents | Built-in worktree per thread | Git worktree per Composer / Cloud Agent task | Workspace isolation; multiple simultaneous Cascade sessions |
 | **Skills** | Persistent project knowledge | `SKILL.md` in `.grok/skills/` or `~/.grok/skills/`; invoked by name | `SKILL.md` in `.claude/skills/` or project skills | [Agent Skills](https://developers.openai.com/codex/skills) — `$name` or implicit match | `.cursor/rules/*.mdc` (globs, `alwaysApply`), `AGENTS.md`, `.cursor/skills/` | `.devin/rules/` or `.windsurf/rules/` (persistent context); `.windsurf/workflows/` (reusable recipes) |
 | **Plugins & Connectors** | Reach into real tools | MCP servers via `CallMcpTool` | MCP servers + plugins | Connectors (MCP) + plugins for distribution | MCP in settings; Cloud Agent sandbox with full connector access | MCP via Cascade settings / `mcp_config.json` |
@@ -18,7 +18,7 @@ Tool-agnostic loop design: the **capability** is what matters, not the product n
 |----------|------|-------------|-------|--------|----------|
 | Every 5 minutes | `/loop 5m <prompt>` | `/loop 5m <prompt>` | Automation, 5m cadence | Automation cron trigger | External cron + `/workflow` or Action |
 | Daily morning | `/loop 1d <prompt>` | Cron / `/loop 1d` | Automation, daily | Automation daily + `AGENTS.md` context | Daily workflow + Memories |
-| Until tests pass | Loop + verifier sub-agent | `/goal all tests pass` | `/goal` | Hooks grind-until-green | Workflow with test/fix loop |
+| Until tests pass | [`/goal`](https://github.com/cobusgreyling/goal-engineering/blob/main/patterns/tests-green.md) + `goal-verifier` skill (or loop + verifier) | `/goal all tests pass` | `/goal` | Hooks grind-until-green | Workflow with test/fix loop |
 | Survive restart | `scheduler_create` with `durable: true` | Hooks + persisted config | Automation (server-side) | Cloud Agent + repo-persisted state | Memories + committed `STATE.md` |
 | Event-driven (CI fail) | `monitor` or GitHub Action | GitHub Action + webhook | Automation + webhook | Automation on PR/issue events | GitHub Action triggers + `/workflow` |
 
@@ -75,6 +75,16 @@ See [examples/](../examples/) for the same pattern implemented across tools.
 Audit after copying: `npx @cobusgreyling/loop-audit . --suggest`
 
 Scaffold automatically: `npx @cobusgreyling/loop-init . --pattern daily-triage --tool grok`
+
+## Goals (run-until-done)
+
+Loops discover ongoing work; **goals finish bounded tasks**. Canonical reference: **[Goal Engineering](https://github.com/cobusgreyling/goal-engineering)** (`/goal`, `update_goal`, `GOAL.md`, `goal-verifier`).
+
+| Handoff | Command |
+|---------|---------|
+| Loop found a fixable item | `/goal Read STATE.md top item. Complete per goal-engineering pattern. goal-verifier before done.` |
+| Audit goal readiness | `npx @cobusgreyling/goal-audit . --suggest` |
+| Goal vs loop decision | [goal-vs-loop.md](https://github.com/cobusgreyling/goal-engineering/blob/main/docs/goal-vs-loop.md) |
 
 ## Appendix: Editor transfer recipes (Cursor & Windsurf)
 
