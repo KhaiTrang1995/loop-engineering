@@ -1,3 +1,17 @@
+const LEVEL_BADGE_COLORS = {
+    L0: '6e7681',
+    L1: 'd29922',
+    L2: '58a6ff',
+    L3: '3ee8c5',
+};
+const SHOWCASE_URL = 'https://cobusgreyling.github.io/loop-engineering/';
+/** Markdown badge for README — paste output from `loop-audit . --badge`. */
+export function formatBadge(r) {
+    const color = LEVEL_BADGE_COLORS[r.level];
+    const label = encodeURIComponent(`${r.level} (${r.score}/100)`).replace(/%20/g, '_');
+    const badgeUrl = `https://img.shields.io/badge/Loop_Ready-${label}-${color}?style=flat-square`;
+    return `[![Loop Ready ${r.level} (${r.score}/100)](${badgeUrl})](${SHOWCASE_URL})`;
+}
 export function formatHuman(r) {
     const lines = [];
     lines.push('');

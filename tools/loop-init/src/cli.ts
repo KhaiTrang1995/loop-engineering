@@ -330,6 +330,18 @@ Examples:
   }
 
   const { pattern, tool, target, dryRun } = args;
+
+  const validPatterns = Object.keys(PATTERN_STARTERS) as Pattern[];
+  const validTools = Object.keys(TOOL_SUFFIX) as Tool[];
+  if (!validPatterns.includes(pattern)) {
+    console.error(`Unknown pattern: ${pattern}. Valid: ${validPatterns.join(', ')}`);
+    process.exit(1);
+  }
+  if (!validTools.includes(tool)) {
+    console.error(`Unknown tool: ${tool}. Valid: ${validTools.join(', ')}`);
+    process.exit(1);
+  }
+
   const targetDir = path.resolve(target);
   const baseStarter = PATTERN_STARTERS[pattern];
   const suffix = TOOL_SUFFIX[tool];

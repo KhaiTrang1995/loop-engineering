@@ -2,9 +2,21 @@
 
 Forks and stars mean people are trying this in their own stacks. If you run a loop from this repo (or adapted from it), add yourself here via PR.
 
+## Loop Ready badge
+
+Show your readiness level in your README:
+
+```bash
+npx @cobusgreyling/loop-audit . --badge
+```
+
+Paste the markdown output into your README. Re-run after you graduate L1 → L2 → L3.
+
 ## How to list your project
 
-Open a PR that adds a row to the table below:
+**Fast path:** [open the Add Adopter issue](https://github.com/cobusgreyling/loop-engineering/issues/new?template=add-adopter.yml) — we'll add your row.
+
+Or open a PR that adds a row to the table below:
 
 | Field | What to include |
 |-------|-----------------|

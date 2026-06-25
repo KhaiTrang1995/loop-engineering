@@ -50,6 +50,36 @@ const STATE_FILES = [
   'issue-triage-state.md',
 ];
 
+/** Score contribution for each readiness signal (see computeScore). */
+const SCORE_WEIGHTS = {
+  base: 10,
+  stateFile: 18,
+  triage: 14,
+  loopConfig: 9,
+  agentsMd: 9,
+  skillsTwoPlus: 14,
+  skillsOne: 7,
+  verifier: 14,
+  safetyLoopMd: 4,
+  safetyDoc: 4,
+  github: 6,
+  githubWorkflows: 4,
+  mcp: 3,
+  worktree: 3,
+  registry: 2,
+  budgetDoc: 3,
+  runLog: 3,
+  loopMdBudget: 2,
+  budgetSkill: 2,
+  loopActivity: 6,
+} as const;
+
+const LEVEL_THRESHOLDS = {
+  L1: 38,
+  L2: 58,
+  L3: 78,
+} as const;
+
 const LOOP_SKILL_NAMES = [
   'loop-triage',
   'minimal-fix',
@@ -163,7 +193,7 @@ async function detectLoopActivity(root: string): Promise<{ present: boolean; evi
       timeout: 1500,
     });
     const lower = log.toLowerCase();
-    if (/state\.md|loop| t riage |changelog-drafter|post-merge|daily triage|audit/i.test(lower)) {
+    if (/state\.md|loop|triage|changelog-drafter|post-merge|daily triage|audit/i.test(lower)) {
       const firstMatch = log.trim().split('\n')[0] || '';
       evidence.push(`git:${firstMatch.slice(0, 60)}`);
     }
@@ -184,27 +214,28 @@ async function detectLoopActivity(root: string): Promise<{ present: boolean; evi
 }
 
 export function computeScore(signals: LoopSignals): { score: number; level: 'L0' | 'L1' | 'L2' | 'L3'; assessment: string } {
-  let score = 10;
+  const w = SCORE_WEIGHTS;
+  let score: number = w.base;
 
-  if (signals.stateFile.present) score += 18;
-  if (signals.triage.present) score += 14;
-  if (signals.loopConfig.present) score += 9;
-  if (signals.agentsMd.present) score += 9;
-  if (signals.skills.count >= 2) score += 14;
-  else if (signals.skills.count === 1) score += 7;
-  if (signals.verifier.present) score += 14;
-  if (signals.safety.loopMdMentionsSafety) score += 4;
-  if (signals.safety.safetyDocPresent) score += 4;
-  if (signals.github.present) score += 6;
-  if (signals.github.workflows) score += 4;
-  if (signals.mcp.present) score += 3;
-  if (signals.worktreeEvidence.present) score += 3;
-  if (signals.registry.present) score += 2;
-  if (signals.cost.budgetDoc) score += 3;
-  if (signals.cost.runLog) score += 3;
-  if (signals.cost.loopMdBudget) score += 2;
-  if (signals.cost.budgetSkill) score += 2;
-  if (signals.loopActivity.present) score += 6;
+  if (signals.stateFile.present) score += w.stateFile;
+  if (signals.triage.present) score += w.triage;
+  if (signals.loopConfig.present) score += w.loopConfig;
+  if (signals.agentsMd.present) score += w.agentsMd;
+  if (signals.skills.count >= 2) score += w.skillsTwoPlus;
+  else if (signals.skills.count === 1) score += w.skillsOne;
+  if (signals.verifier.present) score += w.verifier;
+  if (signals.safety.loopMdMentionsSafety) score += w.safetyLoopMd;
+  if (signals.safety.safetyDocPresent) score += w.safetyDoc;
+  if (signals.github.present) score += w.github;
+  if (signals.github.workflows) score += w.githubWorkflows;
+  if (signals.mcp.present) score += w.mcp;
+  if (signals.worktreeEvidence.present) score += w.worktree;
+  if (signals.registry.present) score += w.registry;
+  if (signals.cost.budgetDoc) score += w.budgetDoc;
+  if (signals.cost.runLog) score += w.runLog;
+  if (signals.cost.loopMdBudget) score += w.loopMdBudget;
+  if (signals.cost.budgetSkill) score += w.budgetSkill;
+  if (signals.loopActivity.present) score += w.loopActivity;
 
   score = Math.min(100, Math.max(0, score));
 
@@ -216,9 +247,9 @@ export function computeScore(signals: LoopSignals): { score: number; level: 'L0'
   const l3Ready = costReady && hasRealActivity;
 
   let level: 'L0' | 'L1' | 'L2' | 'L3' = 'L0';
-  if (score >= 78 && signals.verifier.present && signals.stateFile.present && l3Ready) level = 'L3';
-  else if (score >= 58 && signals.triage.present) level = 'L2';
-  else if (score >= 38 && signals.stateFile.present) level = 'L1';
+  if (score >= LEVEL_THRESHOLDS.L3 && signals.verifier.present && signals.stateFile.present && l3Ready) level = 'L3';
+  else if (score >= LEVEL_THRESHOLDS.L2 && signals.triage.present) level = 'L2';
+  else if (score >= LEVEL_THRESHOLDS.L1 && signals.stateFile.present) level = 'L1';
   else level = 'L0';
 
   const assessment =

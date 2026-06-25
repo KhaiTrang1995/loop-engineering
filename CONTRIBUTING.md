@@ -53,7 +53,8 @@ Also add an entry to `patterns/registry.yaml`.
 ## Community
 
 - **Questions**: [GitHub Discussions](https://github.com/cobusgreyling/loop-engineering/discussions) (preferred) or issue with label `question`
-- **Show your loop**: post in Discussions or add a row to [docs/adopters.md](./docs/adopters.md)
+- **Show your loop**: [Add Adopter issue](https://github.com/cobusgreyling/loop-engineering/issues/new?template=add-adopter.yml), Discussions, or a row in [docs/adopters.md](./docs/adopters.md)
+- **Loop Ready badge**: `npx @cobusgreyling/loop-audit . --badge` — paste into your README
 - **Good first issues**: look for label [`good first issue`](https://github.com/cobusgreyling/loop-engineering/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 - **Security**: see [SECURITY.md](./SECURITY.md) — do not file public issues for exploitable vulnerabilities
 

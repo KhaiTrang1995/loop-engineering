@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 import {
+  assertValidLevel,
   estimateCost,
   formatEstimateHuman,
   type ReadinessLevel,
@@ -92,6 +93,14 @@ Examples:
   const pattern = registry.patterns.find((p) => p.id === args.pattern);
   if (!pattern) {
     console.error(`Unknown pattern: ${args.pattern}. Use --list for ids.`);
+    process.exit(1);
+  }
+
+  try {
+    assertValidLevel(args.level);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(msg);
     process.exit(1);
   }
 

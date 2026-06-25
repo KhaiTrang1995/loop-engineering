@@ -279,7 +279,7 @@
         "ambiguous-duplicates",
         "stale-closures"
       ],
-      "starter": "starters/minimal-loop",
+      "starter": "starters/issue-triage",
       "week_one_mode": "L1",
       "token_cost": "low",
       "cost": {

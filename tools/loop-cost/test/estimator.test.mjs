@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  assertValidLevel,
   cadenceToRunsPerDay,
   runsPerDayForInterval,
   estimateCost,
@@ -46,6 +47,10 @@ test('estimateCost: ci-sweeper 15m L2 warns on high spend', () => {
   assert.ok(r.scenarios.action.tokensPerDay > r.suggestedDailyCap);
   assert.ok(r.warnings.length > 0);
   assert.ok(r.scenarios.realistic.tokensPerDay < r.scenarios.action.tokensPerDay);
+});
+
+test('assertValidLevel: rejects unknown level', () => {
+  assert.throws(() => assertValidLevel('garbage'), /Invalid level/);
 });
 
 test('estimateCost: daily-triage 1d L1 is cheap', () => {

@@ -47,6 +47,20 @@ test('loop-init scaffolds issue-triage with bundled assets', async () => {
   }
 });
 
+test('loop-init rejects unknown pattern', async () => {
+  await assert.rejects(
+    () => exec('node', [CLI, '.', '--pattern', 'not-a-pattern', '--tool', 'grok', '--dry-run']),
+    (err) => err.stderr?.includes('Unknown pattern') || err.message?.includes('Unknown pattern'),
+  );
+});
+
+test('loop-init rejects unknown tool', async () => {
+  await assert.rejects(
+    () => exec('node', [CLI, '.', '--pattern', 'daily-triage', '--tool', 'emacs', '--dry-run']),
+    (err) => err.stderr?.includes('Unknown tool') || err.message?.includes('Unknown tool'),
+  );
+});
+
 test('loop-init scaffolds ci-sweeper with bundled assets', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'loop-init-'));
   try {

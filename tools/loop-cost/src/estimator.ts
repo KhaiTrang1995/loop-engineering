@@ -1,5 +1,13 @@
 export type ReadinessLevel = 'L1' | 'L2' | 'L3';
 
+export const VALID_READINESS_LEVELS: ReadinessLevel[] = ['L1', 'L2', 'L3'];
+
+export function assertValidLevel(level: string): asserts level is ReadinessLevel {
+  if (!VALID_READINESS_LEVELS.includes(level as ReadinessLevel)) {
+    throw new Error(`Invalid level: ${level}. Valid: ${VALID_READINESS_LEVELS.join(', ')}`);
+  }
+}
+
 export interface PatternCost {
   tokens_noop: number;
   tokens_report: number;
@@ -117,6 +125,7 @@ function formatTokens(n: number): string {
 }
 
 export function estimateCost(input: EstimateInput): EstimateResult {
+  assertValidLevel(input.level);
   const cadence = input.cadence ?? input.pattern.cadence;
   const runsPerDay = cadenceToRunsPerDay(cadence, input.conservative);
   const { cost, token_cost: tokenCostTier } = input.pattern;

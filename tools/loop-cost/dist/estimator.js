@@ -1,3 +1,9 @@
+export const VALID_READINESS_LEVELS = ['L1', 'L2', 'L3'];
+export function assertValidLevel(level) {
+    if (!VALID_READINESS_LEVELS.includes(level)) {
+        throw new Error(`Invalid level: ${level}. Valid: ${VALID_READINESS_LEVELS.join(', ')}`);
+    }
+}
 const INTERVAL_MS = {
     m: 60_000,
     h: 3_600_000,
@@ -62,6 +68,7 @@ function formatTokens(n) {
     return String(n);
 }
 export function estimateCost(input) {
+    assertValidLevel(input.level);
     const cadence = input.cadence ?? input.pattern.cadence;
     const runsPerDay = cadenceToRunsPerDay(cadence, input.conservative);
     const { cost, token_cost: tokenCostTier } = input.pattern;

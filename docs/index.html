@@ -37,6 +37,7 @@ title: Loop Engineering — Showcase
         <li><a href="#primitives">Primitives</a></li>
         <li><a href="#interactive">Picker</a></li>
         <li><a href="#start">Get Started</a></li>
+        <li><a href="#adopters">Adopters</a></li>
         <li><a href="https://cobusgreyling.substack.com/p/loop-engineering">Essay</a></li>
         <li><a href="https://github.com/cobusgreyling/loop-engineering">GitHub</a></li>
       </ul>
@@ -430,6 +431,49 @@ npx @cobusgreyling/loop-audit . --suggest
   </div>
 </div>
 
+<section id="adopters" class="wrap">
+  <p class="section-label">Community</p>
+  <h2 class="section-title">Adopters</h2>
+  <p class="section-desc">
+    Forks mean people are trying this. Listed projects run (or adapted) loops from this reference.
+    Add yours via the <a href="https://github.com/cobusgreyling/loop-engineering/issues/new?template=add-adopter.yml">Add Adopter issue</a>
+    or a PR to <code>docs/adopters.md</code>.
+  </p>
+
+  <div class="adopters-cta card">
+    <div>
+      <h3>Show your Loop Ready score</h3>
+      <p>Paste a badge in your README after <code>loop-audit</code> — social proof for your team and contributors.</p>
+      <code class="inline-cmd">npx @cobusgreyling/loop-audit . --badge</code>
+    </div>
+    <a href="https://github.com/cobusgreyling/loop-engineering/issues/new?template=add-adopter.yml" class="btn btn-primary">Add my project →</a>
+  </div>
+
+  <div class="adopters-grid">
+    <article class="adopter-card card">
+      <h4><a href="https://github.com/cobusgreyling/loop-engineering">loop-engineering</a></h4>
+      <p class="adopter-meta">Daily Triage · Changelog Drafter · audit dogfood · <strong>L3</strong></p>
+      <p class="adopter-note">Reference implementation — loop-audit on every PR; readiness score 100.</p>
+    </article>
+    <article class="adopter-card card">
+      <h4><a href="https://github.com/cobusgreyling/loop-engineering">loop-engineering (maintainer)</a></h4>
+      <p class="adopter-meta">Post-Merge Cleanup · Grok + Actions · <strong>L1→L2</strong></p>
+      <p class="adopter-note">Off-peak scan; verifier caught doc/API drift.</p>
+    </article>
+    <article class="adopter-card card">
+      <h4><a href="https://github.com/cobusgreyling/loop-engineering">loop-engineering (maintainer)</a></h4>
+      <p class="adopter-meta">Issue Triage + Daily Triage · Grok · <strong>L1</strong></p>
+      <p class="adopter-note">Propose labels only week one; pairs with morning STATE.md triage.</p>
+    </article>
+    <article class="adopter-card card adopter-placeholder">
+      <h4>Your project here</h4>
+      <p class="adopter-meta">Pattern · Tool · Level</p>
+      <p class="adopter-note">One line on what worked or broke — failures are first-class.</p>
+      <a href="https://github.com/cobusgreyling/loop-engineering/issues/new?template=add-adopter.yml" class="btn btn-ghost">List yours →</a>
+    </article>
+  </div>
+</section>
+
 <footer class="footer">
   <p>
     <a href="https://github.com/cobusgreyling/loop-engineering">GitHub</a>
@@ -521,7 +565,7 @@ const PATTERNS = {
     npx: 'npx @cobusgreyling/loop-init . --pattern issue-triage --tool grok',
     loop: '/loop 1d Run issue-triage. Update issue-triage-state.md. Propose labels and priorities only — no auto-close.',
     patternHref: 'https://github.com/cobusgreyling/loop-engineering/blob/main/patterns/issue-triage.md',
-    starterHref: 'https://github.com/cobusgreyling/loop-engineering/tree/main/starters/minimal-loop'
+    starterHref: 'https://github.com/cobusgreyling/loop-engineering/tree/main/starters/issue-triage'
   }
 };
 

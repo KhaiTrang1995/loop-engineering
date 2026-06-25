@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 import { auditProject } from './auditor.js';
-import { formatHuman, formatJson, formatMarkdown } from './reporter.js';
+import { formatBadge, formatHuman, formatJson, formatMarkdown } from './reporter.js';
 
 const args = process.argv.slice(2);
 const target = args.find((a) => !a.startsWith('-')) || '.';
 const json = args.includes('--json');
 const md = args.includes('--md');
 const suggest = args.includes('--suggest') || args.includes('--fix');
+const badge = args.includes('--badge');
 const help = args.includes('--help') || args.includes('-h');
 
 if (help) {
@@ -19,6 +20,7 @@ Options:
   --json      JSON output (for CI / scripting)
   --md        Markdown report
   --suggest   Show copy-from-template commands for missing pieces (recommended on first runs)
+  --badge     Markdown README badge (Loop Ready level + score)
   --help, -h  This help
 
 New in v1.4:
@@ -33,6 +35,7 @@ Exit codes:
 Examples:
   loop-audit .
   loop-audit . --suggest
+  loop-audit . --badge >> README.md
   npx @cobusgreyling/loop-audit . --json
   npx @cobusgreyling/loop-audit starters/minimal-loop --suggest
   bash scripts/before-after-demo.sh
@@ -42,7 +45,8 @@ Examples:
 
 try {
   const result = await auditProject(target);
-  if (json) console.log(formatJson(result));
+  if (badge) console.log(formatBadge(result));
+  else if (json) console.log(formatJson(result));
   else if (md) console.log(formatMarkdown(result));
   else console.log(formatHuman(result));
 

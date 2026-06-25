@@ -3,7 +3,7 @@ import { readFile, access } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
-import { estimateCost, formatEstimateHuman, } from './estimator.js';
+import { assertValidLevel, estimateCost, formatEstimateHuman, } from './estimator.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, '..');
 function parseArgs(argv) {
@@ -85,6 +85,14 @@ Examples:
     const pattern = registry.patterns.find((p) => p.id === args.pattern);
     if (!pattern) {
         console.error(`Unknown pattern: ${args.pattern}. Use --list for ids.`);
+        process.exit(1);
+    }
+    try {
+        assertValidLevel(args.level);
+    }
+    catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(msg);
         process.exit(1);
     }
     if (!pattern.cost) {

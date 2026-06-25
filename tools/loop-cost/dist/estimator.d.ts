@@ -1,4 +1,6 @@
 export type ReadinessLevel = 'L1' | 'L2' | 'L3';
+export declare const VALID_READINESS_LEVELS: ReadinessLevel[];
+export declare function assertValidLevel(level: string): asserts level is ReadinessLevel;
 export interface PatternCost {
     tokens_noop: number;
     tokens_report: number;

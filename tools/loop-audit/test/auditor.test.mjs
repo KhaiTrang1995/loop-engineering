@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import { auditProject, computeScore } from '../dist/auditor.js';
+import { formatBadge } from '../dist/reporter.js';
 
 function emptySignals() {
   return {
@@ -130,6 +132,38 @@ test('auditProject: minimal L1 layout', async () => {
     assert.equal(result.level, 'L1');
     assert.ok(result.signals.triage.present);
     assert.ok(result.signals.stateFile.present);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('formatBadge: includes level and score', () => {
+  const badge = formatBadge({
+    target: '/tmp',
+    score: 72,
+    level: 'L2',
+    assessment: 'test',
+    signals: emptySignals(),
+    findings: [],
+    recommendations: [],
+  });
+  assert.match(badge, /Loop Ready L2 \(72\/100\)/);
+  assert.match(badge, /img\.shields\.io/);
+  assert.match(badge, /loop-engineering/);
+});
+
+test('auditProject: git commit with triage counts as loop activity', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'loop-audit-git-'));
+  try {
+    execSync('git init', { cwd: dir, stdio: 'ignore' });
+    execSync('git config user.email "test@example.com"', { cwd: dir, stdio: 'ignore' });
+    execSync('git config user.name "Test"', { cwd: dir, stdio: 'ignore' });
+    await writeFile(path.join(dir, 'README.md'), '# test\n');
+    execSync('git add README.md', { cwd: dir, stdio: 'ignore' });
+    execSync('git commit -m "chore: daily triage update"', { cwd: dir, stdio: 'ignore' });
+    const result = await auditProject(dir);
+    assert.ok(result.signals.loopActivity.present);
+    assert.ok(result.signals.loopActivity.evidence.some((e) => e.startsWith('git:')));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

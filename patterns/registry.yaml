@@ -139,7 +139,7 @@ patterns:
     state: issue-triage-state.md
     phases: [discover, dedupe, score, propose-labels, human-review]
     human_gates: [security, p0-p1, ambiguous-duplicates, stale-closures]
-    starter: starters/minimal-loop
+    starter: starters/issue-triage
     week_one_mode: L1
     token_cost: low
     cost:

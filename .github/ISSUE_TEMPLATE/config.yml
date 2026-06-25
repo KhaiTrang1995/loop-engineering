@@ -6,6 +6,9 @@ contact_links:
   - name: "\ud83d\udc1b Report an issue with the docs site or showcase"
     url: https://github.com/cobusgreyling/loop-engineering/issues/new?labels=docs
     about: "Use the bug report template for the reference itself."
+  - name: "\ud83c\udf10 Add my project to Adopters"
+    url: https://github.com/cobusgreyling/loop-engineering/issues/new?template=add-adopter.yml
+    about: "List your loop on the showcase adopters wall and docs/adopters.md."
 
 labels:
   - name: "pattern-request"
