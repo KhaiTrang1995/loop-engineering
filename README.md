@@ -22,6 +22,10 @@
   <img src="assets/visuals/loop-engineering-logo.jpg" alt="Loop Engineering" width="96" />
 </p>
 
+<p align="center">
+  <img src="assets/visuals/LE5.jpeg" alt="Loop Engineering" width="100%" />
+</p>
+
 **Loop engineering is replacing yourself as the person who prompts the agent. You design the system that does it instead.**
 
 For developers using Grok, Claude Code, Codex, Cursor, and other AI coding agents.
