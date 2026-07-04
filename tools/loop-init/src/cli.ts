@@ -184,6 +184,45 @@ async function copyL2Templates(
   }
 }
 
+/** Per-pattern goal seeded into loop-ledger.json for the circuit breaker. */
+const LEDGER_GOAL: Record<Pattern, string> = {
+  'daily-triage': 'Keep the repo healthy and STATE.md current',
+  'pr-babysitter': 'Get the watched PR review-ready and green',
+  'ci-sweeper': 'Get failing CI back to green',
+  'dependency-sweeper': 'Land safe dependency updates',
+  'post-merge-cleanup': 'Clean up regressions from recent merges',
+  'changelog-drafter': 'Draft accurate release notes',
+  'issue-triage': 'Triage the open issue queue',
+};
+
+/**
+ * Fix-capable loops retry actions, so they need a circuit breaker: scaffold the
+ * loop-guard skill plus a seeded loop-ledger.json wired to `loop-context`.
+ * Report-only patterns (daily-triage, issue-triage, changelog-drafter) don't
+ * retry fixes, so they skip this to keep the scaffold minimal.
+ */
+async function scaffoldCircuitBreaker(
+  pattern: Pattern,
+  tool: Tool,
+  targetDir: string,
+  templatesRoot: string,
+  dryRun: boolean,
+) {
+  if (!PATTERNS_NEEDING_FIX.has(pattern)) return;
+
+  await copyTemplateSkill(templatesRoot, 'SKILL.md.loop-guard', targetDir, tool, 'loop-guard', dryRun);
+
+  const ledgerPath = path.join(targetDir, 'loop-ledger.json');
+  if (await exists(ledgerPath)) return;
+  const seed = `${JSON.stringify({ goal: LEDGER_GOAL[pattern], attempts: [] }, null, 2)}\n`;
+  if (dryRun) {
+    console.log(`  would write: ${ledgerPath}`);
+    return;
+  }
+  await writeFile(ledgerPath, seed);
+  console.log('  created: loop-ledger.json (circuit breaker)');
+}
+
 function formatTokenCap(n: number): string {
   if (n >= 1_000_000) return `${n / 1_000_000}M`;
   if (n >= 1_000) return `${n / 1_000}k`;
@@ -524,6 +563,7 @@ Examples:
   }
 
   await copyL2Templates(pattern, tool, targetDir, templatesRoot, dryRun);
+  await scaffoldCircuitBreaker(pattern, tool, targetDir, templatesRoot, dryRun);
   await scaffoldObservability(pattern, tool, targetDir, templatesRoot, dryRun);
 
   await scaffoldConstraints(targetDir, templatesRoot, tool, dryRun);
@@ -558,6 +598,12 @@ npm run lint
       console.log('\n=== Loop Ready score ===');
       console.log(`  npx @cobusgreyling/loop-audit ${auditArg} --suggest`);
     }
+  }
+
+  if (PATTERNS_NEEDING_FIX.has(pattern)) {
+    console.log('');
+    console.log('Circuit breaker wired (loop-guard skill + loop-ledger.json):');
+    console.log('  npx @cobusgreyling/loop-context --check --ledger loop-ledger.json');
   }
 
   console.log('');

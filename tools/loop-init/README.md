@@ -31,6 +31,13 @@ After scaffolding, always run `npx @cobusgreyling/loop-audit . --suggest` and ac
 
 L2 patterns (`ci-sweeper`, `dependency-sweeper`) also copy `minimal-fix` and `loop-verifier` templates when missing from the starter.
 
+Fix-capable patterns (`pr-babysitter`, `ci-sweeper`, `dependency-sweeper`, `post-merge-cleanup`) also get a **circuit breaker**:
+
+- `loop-guard` skill — logs each attempt to `loop-ledger.json` and runs [`loop-context`](../loop-context) `--check` before retrying
+- `loop-ledger.json` — seeded with the pattern's goal and an empty `attempts` array
+
+The breaker escalates (same error N× in a row, too many consecutive failures, token budget, or iteration cap) instead of looping in vain. Report-only patterns skip it.
+
 Every scaffold also creates:
 
 - `loop-budget.md` — pattern-specific daily caps and kill switch

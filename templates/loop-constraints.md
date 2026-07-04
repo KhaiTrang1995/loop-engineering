@@ -18,6 +18,7 @@
 - Never disable tests to make CI green
 - Never refactor unrelated code — one fix per run
 - Max 3 fix attempts per item; escalate after
+- Enforce the attempt limit mechanically: log each try to `loop-ledger.json` and run `loop-context --check` before retrying (see the `loop-guard` skill)
 
 ## Communication
 - Always tell me what you're about to do before doing it
