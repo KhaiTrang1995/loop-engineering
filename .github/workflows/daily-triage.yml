@@ -13,6 +13,11 @@ permissions:
 
 jobs:
   triage:
+    # Dogfooding automation for the canonical repo only. On forks the final
+    # "Open PR" step calls `gh pr merge --auto`, which fails unless the repo
+    # has "Allow auto-merge" enabled — so every scheduled run on a fork goes
+    # red for a reason unrelated to the fork's own changes. Skip it there.
+    if: github.repository == 'cobusgreyling/loop-engineering'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
