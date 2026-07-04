@@ -75,6 +75,29 @@ cat run.json | loop-context --check
 
 Exit codes: `0` continue · `2` escalate · `1` error.
 
+## Populating the ledger
+
+Your loop control script appends one object per iteration to `run.json` (or pipes the same shape on stdin):
+
+```bash
+# after each agent iteration — append attempt, then gate the next one
+node -e "
+const fs = require('fs');
+const ledger = JSON.parse(fs.readFileSync('run.json', 'utf8'));
+ledger.attempts.push({
+  iteration: ledger.attempts.length + 1,
+  action: 'run migration tests',
+  outcome: 'failure',
+  error: process.argv[1],
+  tokensUsed: Number(process.argv[2] || 0),
+});
+fs.writeFileSync('run.json', JSON.stringify(ledger, null, 2));
+" \"\$ERROR_MSG\" \"\$TOKENS\"
+loop-context --check --ledger run.json || { loop-context --inject --ledger run.json; exit 2; }
+```
+
+Initialize once at loop start: `{ \"goal\": \"Get CI green on main\", \"attempts\": [] }`.
+
 ## In a loop
 
 ```bash
