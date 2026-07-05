@@ -15,6 +15,7 @@ Slower overnight cadence (30–60m) is fine when no one is watching.
 
 - `ci-triage` — Parse CI logs, identify failing job/step, classify failure type (flake, regression, env, config)
 - `minimal-fix` — Smallest change that addresses the specific failure
+- `loop-guard` — Circuit breaker: log each attempt to `loop-ledger.json` and run `loop-context --check` before retrying; escalate instead of looping on the same failure
 - Project test/lint skill — Build and test commands for your stack
 
 ## State
@@ -48,7 +49,7 @@ Track: commit SHA, failing job, attempt count, worktree/PR link, outcome.
    - If actionable: open worktree → implementer drafts fix.
 3. Verifier sub-agent checks: fix addresses failure, no unrelated changes, tests pass locally.
 4. Open PR or comment on existing PR with proposed fix.
-5. If attempts exceed max (e.g. 3): escalate to human with full context.
+5. Before each retry, `loop-guard` runs the circuit breaker (`loop-context --check`). If the same failure recurs N× or attempts exceed max (e.g. 3), it trips: escalate to human with a pruned context summary instead of looping.
 6. Prune resolved failures from active list.
 
 ## Verification Strategy

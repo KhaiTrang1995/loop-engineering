@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, access } from 'node:fs/promises';
+import { mkdtemp, rm, access, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
@@ -118,6 +118,42 @@ test('loop-init scaffolds ci-sweeper with bundled assets', async () => {
     await access(path.join(dir, 'loop-budget.md'));
     await access(path.join(dir, 'loop-run-log.md'));
     await access(path.join(dir, '.grok', 'skills', 'loop-budget', 'SKILL.md'));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('loop-init scaffolds circuit breaker (loop-guard + ledger) for fix patterns', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'loop-init-cb-'));
+  try {
+    await exec('node', [CLI, dir, '--pattern', 'ci-sweeper', '--tool', 'grok']);
+    await access(path.join(dir, '.grok', 'skills', 'loop-guard', 'SKILL.md'));
+    const ledger = JSON.parse(await readFile(path.join(dir, 'loop-ledger.json'), 'utf8'));
+    assert.equal(typeof ledger.goal, 'string');
+    assert.ok(ledger.goal.length > 0);
+    assert.deepEqual(ledger.attempts, []);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('loop-init scaffolds circuit breaker for pr-babysitter (opencode paths)', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'loop-init-cb-oc-'));
+  try {
+    await exec('node', [CLI, dir, '--pattern', 'pr-babysitter', '--tool', 'opencode']);
+    await access(path.join(dir, 'skills', 'loop-guard', 'SKILL.md'));
+    await access(path.join(dir, 'loop-ledger.json'));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('loop-init does NOT scaffold circuit breaker for report-only daily-triage', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'loop-init-nocb-'));
+  try {
+    await exec('node', [CLI, dir, '--pattern', 'daily-triage', '--tool', 'grok']);
+    await assert.rejects(() => access(path.join(dir, 'loop-ledger.json')));
+    await assert.rejects(() => access(path.join(dir, '.grok', 'skills', 'loop-guard', 'SKILL.md')));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

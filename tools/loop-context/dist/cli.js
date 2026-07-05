@@ -1,6 +1,17 @@
 #!/usr/bin/env node
 import { readFile } from 'node:fs/promises';
 import { buildContextInjection, checkCircuitBreaker, pruneLedger, summarizeAttempts, DEFAULT_BREAKER, DEFAULT_PRUNE, } from './context-manager.js';
+/** Reject NaN/0/floats so a bad flag cannot silently disable the breaker. */
+function parsePositiveIntFlag(raw, flag) {
+    if (raw === undefined || raw === '') {
+        throw new Error(`${flag} requires a positive integer value.`);
+    }
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 1) {
+        throw new Error(`${flag} must be a positive integer; got "${raw}".`);
+    }
+    return n;
+}
 function parseArgs(argv) {
     const breaker = { ...DEFAULT_BREAKER };
     const prune = { ...DEFAULT_PRUNE };
@@ -26,17 +37,17 @@ function parseArgs(argv) {
         else if (a === '--json')
             json = true;
         else if (a === '--max-iterations')
-            breaker.maxIterations = Number(argv[++i]);
+            breaker.maxIterations = parsePositiveIntFlag(argv[++i], '--max-iterations');
         else if (a === '--stagnation')
-            breaker.stagnationThreshold = Number(argv[++i]);
+            breaker.stagnationThreshold = parsePositiveIntFlag(argv[++i], '--stagnation');
         else if (a === '--no-progress')
-            breaker.noProgressThreshold = Number(argv[++i]);
+            breaker.noProgressThreshold = parsePositiveIntFlag(argv[++i], '--no-progress');
         else if (a === '--token-budget')
-            breaker.tokenBudget = Number(argv[++i]);
+            breaker.tokenBudget = parsePositiveIntFlag(argv[++i], '--token-budget');
         else if (a === '--window')
-            prune.window = Number(argv[++i]);
+            prune.window = parsePositiveIntFlag(argv[++i], '--window');
         else if (a === '--max-trace-lines')
-            prune.maxTraceLines = Number(argv[++i]);
+            prune.maxTraceLines = parsePositiveIntFlag(argv[++i], '--max-trace-lines');
     }
     return { help: false, op, ledger, json, breaker, prune };
 }

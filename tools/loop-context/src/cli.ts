@@ -23,6 +23,18 @@ interface Args {
   prune: PruneConfig;
 }
 
+/** Reject NaN/0/floats so a bad flag cannot silently disable the breaker. */
+function parsePositiveIntFlag(raw: string | undefined, flag: string): number {
+  if (raw === undefined || raw === '') {
+    throw new Error(`${flag} requires a positive integer value.`);
+  }
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) {
+    throw new Error(`${flag} must be a positive integer; got "${raw}".`);
+  }
+  return n;
+}
+
 function parseArgs(argv: string[]): Args {
   const breaker: CircuitBreakerConfig = { ...DEFAULT_BREAKER };
   const prune: PruneConfig = { ...DEFAULT_PRUNE };
@@ -40,12 +52,12 @@ function parseArgs(argv: string[]): Args {
     else if (a === '--summary') op = 'summary';
     else if (a === '--status') op = 'status';
     else if (a === '--json') json = true;
-    else if (a === '--max-iterations') breaker.maxIterations = Number(argv[++i]);
-    else if (a === '--stagnation') breaker.stagnationThreshold = Number(argv[++i]);
-    else if (a === '--no-progress') breaker.noProgressThreshold = Number(argv[++i]);
-    else if (a === '--token-budget') breaker.tokenBudget = Number(argv[++i]);
-    else if (a === '--window') prune.window = Number(argv[++i]);
-    else if (a === '--max-trace-lines') prune.maxTraceLines = Number(argv[++i]);
+    else if (a === '--max-iterations') breaker.maxIterations = parsePositiveIntFlag(argv[++i], '--max-iterations');
+    else if (a === '--stagnation') breaker.stagnationThreshold = parsePositiveIntFlag(argv[++i], '--stagnation');
+    else if (a === '--no-progress') breaker.noProgressThreshold = parsePositiveIntFlag(argv[++i], '--no-progress');
+    else if (a === '--token-budget') breaker.tokenBudget = parsePositiveIntFlag(argv[++i], '--token-budget');
+    else if (a === '--window') prune.window = parsePositiveIntFlag(argv[++i], '--window');
+    else if (a === '--max-trace-lines') prune.maxTraceLines = parsePositiveIntFlag(argv[++i], '--max-trace-lines');
   }
 
   return { help: false, op, ledger, json, breaker, prune };
