@@ -131,6 +131,8 @@ test('loop-init scaffolds circuit breaker (loop-guard + ledger) for fix patterns
     const ledger = JSON.parse(await readFile(path.join(dir, 'loop-ledger.json'), 'utf8'));
     assert.equal(typeof ledger.goal, 'string');
     assert.ok(ledger.goal.length > 0);
+    assert.equal(ledger.pattern, 'ci-sweeper');
+    assert.match(ledger.level, /^L[123]$/);
     assert.deepEqual(ledger.attempts, []);
   } finally {
     await rm(dir, { recursive: true, force: true });

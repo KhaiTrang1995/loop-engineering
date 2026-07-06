@@ -41,4 +41,18 @@ Each estimate includes:
 
 Pair with `loop-budget.md` (scaffolded by `loop-init`) and `loop-audit` cost observability checks.
 
+## Feed the circuit breaker
+
+`--json` output resolves a realistic per-run token cap for
+[`loop-context`](../loop-context)'s breaker, so `--token-budget` reflects real
+pattern cost instead of a hand-typed guess (the `loop-guard` skill wires this):
+
+```bash
+BUDGET=$(npx @cobusgreyling/loop-cost --pattern ci-sweeper --level L2 --json \
+  | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>process.stdout.write(String(JSON.parse(d).scenarios.realistic.tokensPerRun)))')
+npx @cobusgreyling/loop-context --check --ledger loop-ledger.json --token-budget "$BUDGET"
+```
+
+The tools stay independent — no runtime dependency, just shell wiring.
+
 See [docs/operating-loops.md](../../docs/operating-loops.md).
