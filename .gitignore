@@ -33,6 +33,7 @@ build/
 !tools/mcp-server/dist/
 !tools/loop-context/dist/
 !tools/goal-audit/dist/
+!tools/loop-worktree/dist/
 *.egg-info/
 
 # State files that should not be committed in consumer projects (reference repo dogfoods STATE.md)

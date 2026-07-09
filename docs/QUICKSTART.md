@@ -50,6 +50,16 @@ npx @cobusgreyling/loop-cost --pattern daily-triage --level L1 --cadence 1d
 
 Adjust `--pattern`, `--level` (L1 → L2 → L3), and `--cadence` to match what you plan to run. High-frequency loops (CI Sweeper at 5m) can burn tokens fast — slow the cadence or require early-exit triage first.
 
+### Circuit breaker for L2+ loops (optional)
+
+When a loop starts fixing code unattended, wire a **circuit breaker** so it escalates instead of retrying the same failure forever. `loop-init` scaffolds `loop-ledger.json` and a `loop-guard` skill for fix-capable patterns; check the ledger before each retry:
+
+```bash
+npx @cobusgreyling/loop-context --check --ledger loop-ledger.json
+```
+
+Exit `0` = continue · `2` = escalate to a human. The breaker trips on max iterations, the same error repeating N× in a row, too many consecutive failures, or a token budget cap. Full API: [tools/loop-context/README.md](../tools/loop-context/README.md).
+
 ## 4. Audit readiness (30 seconds)
 
 ```bash
@@ -61,6 +71,25 @@ Scores 0–100 with concrete next steps. Re-run after each improvement. Paste a 
 ```bash
 npx @cobusgreyling/loop-audit . --badge
 ```
+
+### Optional: MCP runtime lookup
+
+Agents can query patterns, skills, and state on demand instead of stuffing docs into every prompt. Copy the config stub from [examples/mcp/loop-engineering.mcp.json](../examples/mcp/loop-engineering.mcp.json) into your MCP client settings.
+
+Run the server from npm (no clone required):
+
+```bash
+LOOP_PROJECT_ROOT=. npx @cobusgreyling/loop-mcp-server
+```
+
+Or from a cloned `loop-engineering` repo for local development:
+
+```bash
+cd path/to/loop-engineering/tools/mcp-server && npm ci && npm run build
+LOOP_PROJECT_ROOT=/path/to/your/project node dist/index.js
+```
+
+See [tools/mcp-server/README.md](../tools/mcp-server/README.md) for resources and tools.
 
 ## 5. Run your first loop — report only (2 minutes)
 
@@ -98,6 +127,12 @@ opencode run "Run loop-triage. Read STATE.md first. Update High Priority and Wat
 
 See [examples/opencode/daily-triage.md](../examples/opencode/daily-triage.md) for worktree + verifier patterns (L2+).
 
+### Hermes
+
+No `loop-init --tool hermes` yet — install the `loop-triage` skill manually and schedule via `hermes cron`. See [examples/hermes/daily-triage.md](../examples/hermes/daily-triage.md) for setup, channel delivery, and the full command reference.
+
+Week one: use `--deliver local` so routine triage output stays out of your chat history until you trust it.
+
 ### Cursor
 
 No `loop-init --tool cursor` yet — copy skills and state from any starter, then map scheduling to editor Automations. See [examples/cursor/daily-triage.md](../examples/cursor/daily-triage.md).
@@ -121,10 +156,32 @@ Commit the scaffold + first run update so `loop-audit` sees activity on the next
 | When | Do this |
 |------|---------|
 | End of week one | Re-run `loop-audit . --suggest` — aim for L1 (score ~40+) |
-| Week two | Add a verifier skill; try one assisted fix in a worktree (L2) |
+| Week two | Add a verifier skill; try one assisted fix in a worktree (L2) — see [loop-worktree](#l2-isolated-fix-attempts-loop-worktree) below |
 | Before unattended (L3) | `loop-budget.md` + `loop-run-log.md` filled, human gates in `LOOP.md`, proven runs |
 | Unsure which pattern | [pattern-picker.md](./pattern-picker.md) · [loop-design-checklist.md](./loop-design-checklist.md) |
 | Something broke | [failure-modes.md](./failure-modes.md) · [stories/](../stories/) |
+
+### L2: isolated fix attempts (`loop-worktree`)
+
+PR Babysitter and CI Sweeper need **one git worktree per fix attempt** so retries don't collide on the same branch. `loop-worktree` tracks them in a manifest and sweeps rejected attempts.
+
+```bash
+# Create an isolated worktree for one fix attempt
+npx @cobusgreyling/loop-worktree create --run-id pr-217-fix-1 --pattern pr-babysitter
+
+# Run your fix in the worktree path printed by create, then verifier...
+
+# Verifier rejected — mark for cleanup (audit trail only)
+npx @cobusgreyling/loop-worktree mark --run-id pr-217-fix-1 --status rejected
+
+# Sweep rejected/escalated worktrees older than 24h
+npx @cobusgreyling/loop-worktree cleanup --older-than 24h
+
+# List active worktrees
+npx @cobusgreyling/loop-worktree list
+```
+
+Pair with the [circuit breaker](#circuit-breaker-for-l2-loops-optional) above: when `loop-context --check` exits `2`, mark the worktree `escalated` before handing off to a human. The two tools stay independent — see [tools/loop-worktree/README.md](../tools/loop-worktree/README.md).
 
 ## Copy-paste cheat sheet
 
@@ -144,6 +201,14 @@ npx @cobusgreyling/loop-audit . --suggest
 
 # Optional badge for your README
 npx @cobusgreyling/loop-audit . --badge
+
+# Optional MCP runtime lookup (patterns, skills, state on demand)
+LOOP_PROJECT_ROOT=. npx @cobusgreyling/loop-mcp-server
+
+# L2: isolated worktree per fix attempt (PR Babysitter, CI Sweeper)
+npx @cobusgreyling/loop-worktree create --run-id <id> --pattern <pattern>
+npx @cobusgreyling/loop-worktree mark --run-id <id> --status rejected
+npx @cobusgreyling/loop-worktree cleanup --older-than 24h
 ```
 
 ## Learn the why (optional, 10 minutes)

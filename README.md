@@ -15,6 +15,8 @@
   <a href="https://www.npmjs.com/package/@cobusgreyling/loop-cost"><img src="https://img.shields.io/npm/v/@cobusgreyling/loop-cost?label=loop-cost" alt="loop-cost npm"></a>
   <a href="https://www.npmjs.com/package/@cobusgreyling/loop-sync"><img src="https://img.shields.io/npm/v/@cobusgreyling/loop-sync?label=loop-sync" alt="loop-sync npm"></a>
   <a href="https://www.npmjs.com/package/@cobusgreyling/loop-context"><img src="https://img.shields.io/npm/v/@cobusgreyling/loop-context?label=loop-context" alt="loop-context npm"></a>
+  <a href="https://www.npmjs.com/package/@cobusgreyling/loop-mcp-server"><img src="https://img.shields.io/npm/v/@cobusgreyling/loop-mcp-server?label=loop-mcp-server" alt="loop-mcp-server npm"></a>
+  <a href="https://www.npmjs.com/package/@cobusgreyling/loop-worktree"><img src="https://img.shields.io/npm/v/@cobusgreyling/loop-worktree?label=loop-worktree" alt="loop-worktree npm"></a>
   <a href="https://github.com/cobusgreyling/loop-engineering/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT"></a>
   <a href="https://cobusgreyling.github.io/loop-engineering/"><img src="https://img.shields.io/badge/GitHub_Pages-live%20%7C%20interactive-3ee8c5" alt="Pages"></a>
 </p>
@@ -90,10 +92,11 @@ For developers using Grok, Claude Code, Codex, Cursor, and other AI coding agent
 | [loop-cost](tools/loop-cost/) | Token spend estimator — `npx @cobusgreyling/loop-cost` |
 | [loop-sync](tools/loop-sync/) | Drift detection between `STATE.md` and `LOOP.md` — `npx @cobusgreyling/loop-sync .` |
 | [loop-context](tools/loop-context/) | Stateful memory manager + circuit breaker for long runs — `npx @cobusgreyling/loop-context --check --ledger run.json` |
-| [loop-mcp-server](tools/mcp-server/) | MCP runtime lookup for patterns, skills, state — `node tools/mcp-server/dist/index.js` (repo v1; npm pending) |
+| [loop-mcp-server](tools/mcp-server/) | MCP runtime lookup for patterns, skills, state — `npx @cobusgreyling/loop-mcp-server` |
+| [loop-worktree](tools/loop-worktree/) | Manage isolated git worktrees per fix attempt — `npx @cobusgreyling/loop-worktree create --run-id <id> --pattern <p>` |
 | [Goal Engineering](https://github.com/cobusgreyling/goal-engineering) | **Companion:** loops discover, goals finish — `/goal` + [stack cookbook](https://github.com/cobusgreyling/goal-engineering/blob/main/docs/stack-cookbook.md) (`npx @cobusgreyling/goal doctor .`) |
 | [Stories](stories/) | Real wins and honest failures |
-| [Contributor quickstart](https://github.com/cobusgreyling/loop-engineering/discussions/123) | **Help wanted:** 9 scoped `good first issues` — comment *I'll take this* to get assigned |
+| [Contributor quickstart](https://github.com/cobusgreyling/loop-engineering/discussions/123) | **Help wanted:** 25 scoped `good first issues` — comment *I'll take this* to get assigned |
 | [Community update](https://github.com/cobusgreyling/loop-engineering/discussions/145) | **July 4:** 5.5k stars, traffic sources, contributor merges |
 | [Prior release notes](https://github.com/cobusgreyling/loop-engineering/discussions/89) | v1.5.0 — loop-sync, constraints, MCP server |
 | [Add your project](https://github.com/cobusgreyling/loop-engineering/discussions/92) | **Pinned:** Loop Ready badge + adopters list |
@@ -247,13 +250,15 @@ Addy Osmani:
 
 ## Help wanted
 
-**First PR?** Start with the [contributor quickstart](https://github.com/cobusgreyling/loop-engineering/discussions/123) — ~10 min to ~1 hr tasks with same-day review on stories and adopters.
+**First PR?** Start with the [contributor quickstart](https://github.com/cobusgreyling/loop-engineering/discussions/123) — ~10 min to ~1 hr tasks with same-day review on stories and adopters. See [CONTRIBUTORS.md](CONTRIBUTORS.md) for everyone who has shipped so far.
 
 | Pick one | Issue |
 |----------|-------|
 | ~10 min | [#120 — Add your project to adopters](https://github.com/cobusgreyling/loop-engineering/issues/120) |
-| ~20 min | [#121 — QUICKSTART `loop-init --tool` values](https://github.com/cobusgreyling/loop-engineering/issues/121) |
-| ~1 hr | [#118](https://github.com/cobusgreyling/loop-engineering/issues/118) / [#119](https://github.com/cobusgreyling/loop-engineering/issues/119) — **failure stories welcome** |
+| ~15 min | [#227 — `loop-sync` subsection in QUICKSTART](https://github.com/cobusgreyling/loop-engineering/issues/227) |
+| ~30 min | [#147 — Cline appendix](https://github.com/cobusgreyling/loop-engineering/issues/147) · [#220 — Cursor CI Sweeper example](https://github.com/cobusgreyling/loop-engineering/issues/220) |
+| ~45 min | [#225 — Hermes PR Babysitter example](https://github.com/cobusgreyling/loop-engineering/issues/225) |
+| ~1 hr | [#230](https://github.com/cobusgreyling/loop-engineering/issues/230) / [#231](https://github.com/cobusgreyling/loop-engineering/issues/231) — **your story** (worktree week-two, multi-loop failure) |
 
 Comment **"I'll take this"** on any [`good first issue`](https://github.com/cobusgreyling/loop-engineering/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for assignment.
 
@@ -284,11 +289,12 @@ MIT
 </p>
 
 <p align="center">
-  <a href="https://www.star-history.com/?repos=cobusgreyling%2Floop-engineering&type=timeline&legend=top-left">
+  <a href="https://cobusgreyling.github.io/loop-engineering/star-history.html">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=cobusgreyling/loop-engineering&type=timeline&theme=dark&legend=top-left" />
-      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=cobusgreyling/loop-engineering&type=timeline&legend=top-left" />
-      <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=cobusgreyling/loop-engineering&type=timeline&legend=top-left" />
+      <source media="(prefers-color-scheme: dark)" srcset="assets/visuals/star-history-dark.svg" />
+      <source media="(prefers-color-scheme: light)" srcset="assets/visuals/star-history.svg" />
+      <img alt="Star History Chart" src="assets/visuals/star-history.svg" />
     </picture>
   </a>
 </p>
+<p align="center"><sub>Static chart (CI-updated daily). <a href="https://cobusgreyling.github.io/loop-engineering/star-history.html">Live chart</a> needs a GitHub token — stored in your browser only.</sub></p>

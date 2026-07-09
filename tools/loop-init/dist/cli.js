@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { cp, mkdir, readFile, writeFile, access } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { printContributorCta } from './contributor-cta.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(__dirname, '..');
 const MONOREPO_STARTERS = path.resolve(PACKAGE_ROOT, '../../starters');
@@ -153,6 +154,22 @@ const LEDGER_GOAL = {
     'issue-triage': 'Triage the open issue queue',
 };
 /**
+ * Readiness level seeded into loop-ledger.json so the loop-guard skill can
+ * resolve a realistic per-run token budget from `loop-cost --json` instead of a
+ * hand-typed number. Fix-capable loops draft changes with a verifier (a human
+ * still merges), so L2 is the right default; tune it in the ledger if a loop
+ * runs unattended (L3) or report-only (L1).
+ */
+const LEDGER_LEVEL = {
+    'daily-triage': 'L1',
+    'pr-babysitter': 'L2',
+    'ci-sweeper': 'L2',
+    'dependency-sweeper': 'L2',
+    'post-merge-cleanup': 'L2',
+    'changelog-drafter': 'L1',
+    'issue-triage': 'L1',
+};
+/**
  * Fix-capable loops retry actions, so they need a circuit breaker: scaffold the
  * loop-guard skill plus a seeded loop-ledger.json wired to `loop-context`.
  * Report-only patterns (daily-triage, issue-triage, changelog-drafter) don't
@@ -165,7 +182,7 @@ async function scaffoldCircuitBreaker(pattern, tool, targetDir, templatesRoot, d
     const ledgerPath = path.join(targetDir, 'loop-ledger.json');
     if (await exists(ledgerPath))
         return;
-    const seed = `${JSON.stringify({ goal: LEDGER_GOAL[pattern], attempts: [] }, null, 2)}\n`;
+    const seed = `${JSON.stringify({ goal: LEDGER_GOAL[pattern], pattern, level: LEDGER_LEVEL[pattern], attempts: [] }, null, 2)}\n`;
     if (dryRun) {
         console.log(`  would write: ${ledgerPath}`);
         return;
@@ -517,7 +534,7 @@ npm run lint
     console.log(`  ${firstLoopCommand(pattern, tool)}`);
     console.log('');
     console.log(`Estimate cost: npx @cobusgreyling/loop-cost --pattern ${pattern} --level L1`);
-    console.log('');
+    printContributorCta();
 }
 async function readDirNames(dir) {
     const { readdir } = await import('node:fs/promises');

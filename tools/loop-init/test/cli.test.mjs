@@ -58,6 +58,8 @@ test('loop-init prints Loop Ready score after scaffold', async () => {
     assert.match(stdout, /Loop Ready:/);
     assert.match(stdout, /\/100/);
     assert.match(stdout, /--badge/);
+    assert.match(stdout, /Contribute \(~15 min tasks\):/);
+    assert.match(stdout, /discussions\/123/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -131,6 +133,8 @@ test('loop-init scaffolds circuit breaker (loop-guard + ledger) for fix patterns
     const ledger = JSON.parse(await readFile(path.join(dir, 'loop-ledger.json'), 'utf8'));
     assert.equal(typeof ledger.goal, 'string');
     assert.ok(ledger.goal.length > 0);
+    assert.equal(ledger.pattern, 'ci-sweeper');
+    assert.match(ledger.level, /^L[123]$/);
     assert.deepEqual(ledger.attempts, []);
   } finally {
     await rm(dir, { recursive: true, force: true });

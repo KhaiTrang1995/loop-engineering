@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { auditProject, computeScore } from '../dist/auditor.js';
 import { formatBadge } from '../dist/reporter.js';
 
@@ -212,4 +212,15 @@ test('auditProject: opencode.json verifier agent counts as loop-verifier', async
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('loop-audit CLI prints contributor CTA on human output', () => {
+  const stdout = execFileSync('node', ['dist/cli.js', '../../'], { encoding: 'utf8' });
+  assert.match(stdout, /Contribute \(~15 min tasks\):/);
+  assert.match(stdout, /discussions\/123/);
+});
+
+test('loop-audit CLI omits contributor CTA for --json', () => {
+  const stdout = execFileSync('node', ['dist/cli.js', '../../', '--json'], { encoding: 'utf8' });
+  assert.doesNotMatch(stdout, /discussions\/123/);
 });

@@ -23,7 +23,7 @@ When two agents edit the same files at the same time you get merge hell. Git wor
 
 In Grok: pass `isolation: "worktree"` when spawning subagents, or use `--worktree` / dedicated sessions.
 
-Cleanup is important — loops should delete the worktree when the task is done or handed off.
+Cleanup is important — loops should delete the worktree when the task is done or handed off. The [loop-worktree](../tools/loop-worktree/) CLI makes this mechanical: one worktree per attempt, tracked in a manifest, swept on reject or escalation.
 
 ## 3. Skills
 

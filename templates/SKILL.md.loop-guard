@@ -18,11 +18,15 @@ The breaker needs no LLM call, so it is cheap enough to run on every iteration.
 
 ## The ledger
 
-`loop-ledger.json` records the loop's goal and one entry per attempt:
+`loop-ledger.json` records the loop's goal, its pattern/level, and one entry per
+attempt:
 
 ```json
-{ "goal": "Get failing CI green", "attempts": [] }
+{ "goal": "Get failing CI green", "pattern": "ci-sweeper", "level": "L2", "attempts": [] }
 ```
+
+`pattern` and `level` are seeded by `loop-init`; the breaker ignores them but the
+budget step below reads them to size `--token-budget` from real cost data.
 
 After every iteration, append what you just tried:
 
@@ -34,12 +38,30 @@ After every iteration, append what you just tried:
 `outcome` is `success | failure | noop`. Always include `error` on failures —
 that is how the breaker detects a repeated (stagnant) failure.
 
+## Size the token budget from the pattern (once per run)
+
+Don't hand-type a token cap — derive it from the pattern's realistic per-run
+cost so the breaker trips on genuine cost blowup, not a made-up number.
+[`loop-cost`](https://github.com/cobusgreyling/loop-engineering/tree/main/tools/loop-cost)
+already computes this from `patterns/registry.yaml`; read the loop's `pattern`
+and `level` straight from the ledger:
+
+```bash
+# Substitute the ledger's own pattern/level (here: ci-sweeper / L2).
+BUDGET=$(npx @cobusgreyling/loop-cost --pattern ci-sweeper --level L2 --json \
+  | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>process.stdout.write(String(JSON.parse(d).scenarios.realistic.tokensPerRun)))')
+```
+
+`scenarios.realistic.tokensPerRun` is a rounded integer, so it feeds
+`--token-budget` directly. The two tools stay independent — this is shell
+wiring, not a code dependency.
+
 ## Before each iteration
 
 1. Append the previous attempt to `loop-ledger.json`.
-2. Run the breaker:
+2. Run the breaker with the resolved budget:
    ```bash
-   npx @cobusgreyling/loop-context --check --ledger loop-ledger.json
+   npx @cobusgreyling/loop-context --check --ledger loop-ledger.json --token-budget "$BUDGET"
    ```
 3. Act on the exit code:
    - **0** → continue. Optionally trim the next prompt first:
@@ -68,4 +90,5 @@ that is how the breaker detects a repeated (stagnant) failure.
 - `minimal-fix` / `ci-triage` — record each attempt's outcome + error in the ledger.
 - `loop-verifier` — a verifier rejection is a `failure`; log it so repeats trip the breaker.
 - `loop-constraints` — honors "escalate after N attempts"; this skill makes it mechanical.
-- `loop-budget` — `--token-budget` mirrors the daily cap in loop-budget.md.
+- `loop-budget` — the per-run `--token-budget` here comes from loop-cost's
+  realistic estimate; loop-budget.md still governs the *daily* cap across runs.

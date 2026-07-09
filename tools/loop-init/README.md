@@ -34,9 +34,9 @@ L2 patterns (`ci-sweeper`, `dependency-sweeper`) also copy `minimal-fix` and `lo
 Fix-capable patterns (`pr-babysitter`, `ci-sweeper`, `dependency-sweeper`, `post-merge-cleanup`) also get a **circuit breaker**:
 
 - `loop-guard` skill — logs each attempt to `loop-ledger.json` and runs [`loop-context`](../loop-context) `--check` before retrying
-- `loop-ledger.json` — seeded with the pattern's goal and an empty `attempts` array
+- `loop-ledger.json` — seeded with the pattern's goal, its `pattern`/`level`, and an empty `attempts` array
 
-The breaker escalates (same error N× in a row, too many consecutive failures, token budget, or iteration cap) instead of looping in vain. Report-only patterns skip it.
+The ledger's `pattern`/`level` let `loop-guard` size the breaker's `--token-budget` from [`loop-cost`](../loop-cost)'s realistic per-run estimate instead of a hand-typed number. The breaker escalates (same error N× in a row, too many consecutive failures, token budget, or iteration cap) instead of looping in vain. Report-only patterns skip it.
 
 Every scaffold also creates:
 

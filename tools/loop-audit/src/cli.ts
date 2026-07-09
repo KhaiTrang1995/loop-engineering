@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { auditProject } from './auditor.js';
+import { printContributorCta } from './contributor-cta.js';
 import { formatBadge, formatHuman, formatJson, formatMarkdown } from './reporter.js';
 
 const args = process.argv.slice(2);
@@ -92,6 +93,8 @@ try {
     console.log('');
     console.log('See docs/loop-design-checklist.md and patterns/ for full guidance.');
   }
+
+  if (!json && !badge && !md) printContributorCta();
 
   if (result.score < 40) process.exitCode = 2;
 } catch (err: unknown) {
