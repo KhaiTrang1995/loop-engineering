@@ -47,6 +47,13 @@ const PATTERNS_NEEDING_FIX: Set<Pattern> = new Set([
   'post-merge-cleanup',
 ]);
 
+/**
+ * Patterns that act on human-authored, often underspecified input (issues).
+ * They get the loop-intake skill so the loop clarifies a vague item or escalates
+ * it instead of guessing and burning fix attempts.
+ */
+const PATTERNS_NEEDING_INTAKE: Set<Pattern> = new Set(['issue-triage']);
+
 const STATE_FILES: Record<Pattern, string> = {
   'daily-triage': 'STATE.md',
   'pr-babysitter': 'pr-babysitter-state.md',
@@ -243,6 +250,21 @@ async function scaffoldCircuitBreaker(
   }
   await writeFile(ledgerPath, seed);
   console.log('  created: loop-ledger.json (circuit breaker)');
+}
+
+/**
+ * Scaffold the loop-intake skill for patterns that receive ambiguous human
+ * input, so the loop sharpens the goal (or escalates) before acting on it.
+ */
+async function scaffoldIntake(
+  pattern: Pattern,
+  tool: Tool,
+  targetDir: string,
+  templatesRoot: string,
+  dryRun: boolean,
+) {
+  if (!PATTERNS_NEEDING_INTAKE.has(pattern)) return;
+  await copyTemplateSkill(templatesRoot, 'SKILL.md.loop-intake', targetDir, tool, 'loop-intake', dryRun);
 }
 
 function formatTokenCap(n: number): string {
@@ -587,6 +609,7 @@ Examples:
   await copyL2Templates(pattern, tool, targetDir, templatesRoot, dryRun);
   await scaffoldCircuitBreaker(pattern, tool, targetDir, templatesRoot, dryRun);
   await scaffoldObservability(pattern, tool, targetDir, templatesRoot, dryRun);
+  await scaffoldIntake(pattern, tool, targetDir, templatesRoot, dryRun);
 
   await scaffoldConstraints(targetDir, templatesRoot, tool, dryRun);
   if (tool !== 'opencode' && !dryRun && !(await exists(path.join(targetDir, 'AGENTS.md')))) {
@@ -626,6 +649,11 @@ npm run lint
     console.log('');
     console.log('Circuit breaker wired (loop-guard skill + loop-ledger.json):');
     console.log('  npx @cobusgreyling/loop-context --check --ledger loop-ledger.json');
+  }
+
+  if (PATTERNS_NEEDING_INTAKE.has(pattern)) {
+    console.log('');
+    console.log('Intake wired (loop-intake skill): clarify a vague item or escalate before acting.');
   }
 
   console.log('');

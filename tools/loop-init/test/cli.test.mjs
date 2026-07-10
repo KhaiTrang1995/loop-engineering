@@ -79,6 +79,27 @@ test('loop-init scaffolds issue-triage with bundled assets', async () => {
   }
 });
 
+test('loop-init scaffolds loop-intake for issue-triage', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'loop-init-intake-'));
+  try {
+    const { stdout } = await exec('node', [CLI, dir, '--pattern', 'issue-triage', '--tool', 'grok']);
+    await access(path.join(dir, '.grok', 'skills', 'loop-intake', 'SKILL.md'));
+    assert.match(stdout, /Intake wired/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('loop-init does NOT scaffold loop-intake for report-only daily-triage', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'loop-init-no-intake-'));
+  try {
+    await exec('node', [CLI, dir, '--pattern', 'daily-triage', '--tool', 'grok']);
+    await assert.rejects(() => access(path.join(dir, '.grok', 'skills', 'loop-intake', 'SKILL.md')));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('loop-init rejects unknown pattern', async () => {
   await assert.rejects(
     () => exec('node', [CLI, '.', '--pattern', 'not-a-pattern', '--tool', 'grok', '--dry-run']),

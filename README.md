@@ -87,8 +87,8 @@ For developers using Grok, Claude Code, Codex, Cursor, and other AI coding agent
 | [Patterns](patterns/README.md) | 7 production patterns + [interactive picker](https://cobusgreyling.github.io/loop-engineering/#interactive) |
 | [Starters](starters/) | Clone-and-run kits (Grok, Claude Code, Codex, Opencode) |
 | [Opencode examples](examples/opencode/) | CLI-first loops: cron/systemd + `opencode run`, skills, worktrees |
-| [loop-audit](tools/loop-audit/) | Loop Readiness Score CLI (v1.5 + constraints scoring) — `npx @cobusgreyling/loop-audit . --suggest` · `--badge` for README |
-| [loop-init](tools/loop-init/) | Scaffold starters + budget/run-log + constraints (v1.2) — `npx @cobusgreyling/loop-init . --pattern daily-triage --tool grok` |
+| [loop-audit](tools/loop-audit/) | Loop Readiness Score CLI (v1.6 — constraints + governance scoring) — `npx @cobusgreyling/loop-audit . --suggest` · `--badge` for README |
+| [loop-init](tools/loop-init/) | Scaffold starters + budget/run-log + constraints (v1.3) — `npx @cobusgreyling/loop-init . --pattern daily-triage --tool grok` |
 | [loop-cost](tools/loop-cost/) | Token spend estimator — `npx @cobusgreyling/loop-cost` |
 | [loop-sync](tools/loop-sync/) | Drift detection between `STATE.md` and `LOOP.md` — `npx @cobusgreyling/loop-sync .` |
 | [loop-context](tools/loop-context/) | Stateful memory manager + circuit breaker for long runs — `npx @cobusgreyling/loop-context --check --ledger run.json` |
@@ -96,8 +96,10 @@ For developers using Grok, Claude Code, Codex, Cursor, and other AI coding agent
 | [loop-worktree](tools/loop-worktree/) | Manage isolated git worktrees per fix attempt — `npx @cobusgreyling/loop-worktree create --run-id <id> --pattern <p>` |
 | [Goal Engineering](https://github.com/cobusgreyling/goal-engineering) | **Companion:** loops discover, goals finish — `/goal` + [stack cookbook](https://github.com/cobusgreyling/goal-engineering/blob/main/docs/stack-cookbook.md) (`npx @cobusgreyling/goal doctor .`) |
 | [Stories](stories/) | Real wins and honest failures |
-| [Contributor quickstart](https://github.com/cobusgreyling/loop-engineering/discussions/123) | **Help wanted:** 25 scoped `good first issues` — comment *I'll take this* to get assigned |
+| [Contributor quickstart](https://github.com/cobusgreyling/loop-engineering/discussions/123) | **Help wanted:** 21 scoped `good first issues` — comment *I'll take this* to get assigned |
 | [Community update](https://github.com/cobusgreyling/loop-engineering/discussions/145) | **July 4:** 5.5k stars, traffic sources, contributor merges |
+| [Community week (Jul 8)](https://github.com/cobusgreyling/loop-engineering/discussions/219) | loop-worktree npm, MCP quickstart, tool appendices |
+| [Maintenance (Jul 10)](https://github.com/cobusgreyling/loop-engineering/discussions/241) | Doc sync, branch prune, loop-audit 1.6.0 follow-up |
 | [Prior release notes](https://github.com/cobusgreyling/loop-engineering/discussions/89) | v1.5.0 — loop-sync, constraints, MCP server |
 | [Add your project](https://github.com/cobusgreyling/loop-engineering/discussions/92) | **Pinned:** Loop Ready badge + adopters list |
 
@@ -204,7 +206,7 @@ bash scripts/before-after-demo.sh
 /loop 1d Run loop-triage. Update STATE.md. No auto-fix in week one.
 ```
 
-All three CLIs publish to npm from tagged releases — see [docs/RELEASE.md](docs/RELEASE.md). No clone required.
+All npm CLIs publish from tagged releases — see [docs/RELEASE.md](docs/RELEASE.md). No clone required.
 
 **Develop from source** (monorepo contributors):
 
@@ -255,10 +257,15 @@ Addy Osmani:
 | Pick one | Issue |
 |----------|-------|
 | ~10 min | [#120 — Add your project to adopters](https://github.com/cobusgreyling/loop-engineering/issues/120) |
-| ~15 min | [#227 — `loop-sync` subsection in QUICKSTART](https://github.com/cobusgreyling/loop-engineering/issues/227) |
+| ~15 min | [#118 — Daily Triage story](https://github.com/cobusgreyling/loop-engineering/issues/118) · [#119 — PR Babysitter failure story](https://github.com/cobusgreyling/loop-engineering/issues/119) |
+| ~15 min | [#226 — `loop-sync` subsection in QUICKSTART](https://github.com/cobusgreyling/loop-engineering/issues/226) |
+| ~20 min | [#117 — Continue.dev row in primitives matrix](https://github.com/cobusgreyling/loop-engineering/issues/117) |
 | ~30 min | [#147 — Cline appendix](https://github.com/cobusgreyling/loop-engineering/issues/147) · [#220 — Cursor CI Sweeper example](https://github.com/cobusgreyling/loop-engineering/issues/220) |
-| ~45 min | [#225 — Hermes PR Babysitter example](https://github.com/cobusgreyling/loop-engineering/issues/225) |
-| ~1 hr | [#230](https://github.com/cobusgreyling/loop-engineering/issues/230) / [#231](https://github.com/cobusgreyling/loop-engineering/issues/231) — **your story** (worktree week-two, multi-loop failure) |
+| ~30 min | [#221 — Cursor Post-Merge Cleanup](https://github.com/cobusgreyling/loop-engineering/issues/221) · [#224 — Cursor Issue Triage](https://github.com/cobusgreyling/loop-engineering/issues/224) |
+| ~30 min | [#195 — Roo Code appendix](https://github.com/cobusgreyling/loop-engineering/issues/195) · [#196 — GitHub Copilot appendix](https://github.com/cobusgreyling/loop-engineering/issues/196) |
+| ~45 min | [#225 — Hermes PR Babysitter example](https://github.com/cobusgreyling/loop-engineering/issues/225) · [#231 — loop-init validation checklist](https://github.com/cobusgreyling/loop-engineering/issues/231) |
+| ~1 hr | [#229](https://github.com/cobusgreyling/loop-engineering/issues/229) / [#230](https://github.com/cobusgreyling/loop-engineering/issues/230) — **your story** (worktree week-two, multi-loop failure) |
+| ~1 hr | [#173 — Issue Triage week-one story](https://github.com/cobusgreyling/loop-engineering/issues/173) |
 
 Comment **"I'll take this"** on any [`good first issue`](https://github.com/cobusgreyling/loop-engineering/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for assignment.
 

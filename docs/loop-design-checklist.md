@@ -8,6 +8,7 @@ Use this before enabling a loop in production. Score honestly — a loop missing
 - [ ] **Explicit non-goals** — what will this loop *not* do?
 - [ ] **Watched scope** — which repos, branches, PRs, or tickets?
 - [ ] **Phased rollout** — report-only first, then act on small wins?
+- [ ] **Ambiguous input handled** — when a work item is too vague to verify "done", the loop clarifies it or escalates instead of guessing (scaffold the `loop-intake` skill via `loop-init` for issue-driven patterns)
 
 ## 2. Scheduling
 

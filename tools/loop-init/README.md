@@ -38,6 +38,10 @@ Fix-capable patterns (`pr-babysitter`, `ci-sweeper`, `dependency-sweeper`, `post
 
 The ledger's `pattern`/`level` let `loop-guard` size the breaker's `--token-budget` from [`loop-cost`](../loop-cost)'s realistic per-run estimate instead of a hand-typed number. The breaker escalates (same error N× in a row, too many consecutive failures, token budget, or iteration cap) instead of looping in vain. Report-only patterns skip it.
 
+Patterns that act on human-authored, often underspecified input (`issue-triage`) also get an **intake** skill:
+
+- `loop-intake` skill — when a work item is too vague to verify "done", it asks one question at a time, pushes for exact values, and writes an open question + `needs-human` escalation instead of guessing. Clarifying up front keeps the loop from burning fix attempts on a goal that was never well defined.
+
 Every scaffold also creates:
 
 - `loop-budget.md` — pattern-specific daily caps and kill switch
