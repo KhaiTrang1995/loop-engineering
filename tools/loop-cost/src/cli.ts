@@ -7,6 +7,7 @@ import {
   assertValidLevel,
   estimateCost,
   formatEstimateHuman,
+  parseOrchestration,
   type ReadinessLevel,
   type RegistryDoc,
 } from './estimator.js';
@@ -21,19 +22,21 @@ function parseArgs(argv: string[]) {
   let conservative = false;
   let json = false;
   let list = false;
+  let orchestration = 'single';
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--pattern' || a === '-p') pattern = argv[++i];
     else if (a === '--cadence' || a === '-c') cadence = argv[++i];
     else if (a === '--level' || a === '-l') level = argv[++i] as ReadinessLevel;
+    else if (a === '--orchestration' || a === '-o') orchestration = argv[++i];
     else if (a === '--conservative') conservative = true;
     else if (a === '--json') json = true;
     else if (a === '--list') list = true;
     else if (a === '--help' || a === '-h') return { help: true as const };
   }
 
-  return { help: false as const, pattern, cadence, level, conservative, json, list };
+  return { help: false as const, pattern, cadence, level, conservative, json, list, orchestration };
 }
 
 async function loadRegistry(): Promise<RegistryDoc> {
@@ -68,6 +71,9 @@ Options:
   -p, --pattern <id>     Pattern id (default: daily-triage)
   -c, --cadence <spec>   Override cadence (e.g. 15m, 1d, 5m-15m)
   -l, --level <L1|L2|L3> Readiness level (default: L1)
+  -o, --orchestration <mode>
+                         Multi-agent action cost: single (default),
+                         maker-checker, parallel:N, debate:R
   --conservative         Use slower cadence from ranges (e.g. 15m not 5m)
   --json                 Machine-readable output
   --list                 List pattern ids
@@ -75,6 +81,7 @@ Options:
 
 Examples:
   loop-cost --pattern ci-sweeper --cadence 15m --level L2
+  loop-cost --pattern ci-sweeper --level L2 --orchestration maker-checker
   loop-cost --pattern daily-triage --level L1 --json
   loop-cost --list
 `);
@@ -98,6 +105,7 @@ Examples:
 
   try {
     assertValidLevel(args.level);
+    parseOrchestration(args.orchestration);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(msg);
@@ -114,6 +122,7 @@ Examples:
     cadence: args.cadence,
     level: args.level,
     conservative: args.conservative,
+    orchestration: args.orchestration,
   });
 
   if (args.json) console.log(JSON.stringify(result, null, 2));
