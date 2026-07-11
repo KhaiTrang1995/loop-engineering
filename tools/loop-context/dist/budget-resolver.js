@@ -1,0 +1,85 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { access } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PACKAGE_ROOT = path.resolve(__dirname, '..');
+export const VALID_BUDGET_SCENARIOS = ['realistic', 'action', 'report'];
+export function assertValidBudgetScenario(scenario) {
+    if (!VALID_BUDGET_SCENARIOS.includes(scenario)) {
+        throw new Error(`Invalid --budget-scenario: ${scenario}. Valid: ${VALID_BUDGET_SCENARIOS.join(', ')}`);
+    }
+}
+async function exists(p) {
+    try {
+        await access(p);
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+/** Locate loop-cost's built CLI: monorepo sibling first, then an installed dependency. */
+export async function resolveCostCli() {
+    const monorepo = path.resolve(PACKAGE_ROOT, '../loop-cost/dist/cli.js');
+    if (await exists(monorepo))
+        return monorepo;
+    try {
+        const { createRequire } = await import('node:module');
+        const require = createRequire(import.meta.url);
+        const pkg = require.resolve('@cobusgreyling/loop-cost/package.json');
+        return path.join(path.dirname(pkg), 'dist/cli.js');
+    }
+    catch {
+        return null;
+    }
+}
+function runCostCli(cli, args) {
+    return new Promise((resolve, reject) => {
+        const child = spawn('node', [cli, ...args, '--json'], { stdio: ['ignore', 'pipe', 'pipe'] });
+        let stdout = '';
+        let stderr = '';
+        child.stdout.on('data', (chunk) => (stdout += chunk.toString()));
+        child.stderr.on('data', (chunk) => (stderr += chunk.toString()));
+        child.on('error', reject);
+        child.on('close', (code) => resolve({ stdout, stderr, code }));
+    });
+}
+/**
+ * Resolve a token budget from loop-cost's realistic per-pattern estimate
+ * instead of a hand-typed number. Shells out to loop-cost's built CLI
+ * (same monorepo-then-installed-dependency resolution loop-init uses for
+ * loop-audit) so the two tools stay independent at the source level.
+ */
+export async function resolveTokenBudgetFromPattern(input) {
+    const scenario = input.scenario ?? 'realistic';
+    assertValidBudgetScenario(scenario);
+    const cli = await resolveCostCli();
+    if (!cli) {
+        throw new Error('--budget-from-pattern requires @cobusgreyling/loop-cost. Install it, or run from the loop-engineering monorepo.');
+    }
+    const args = ['--pattern', input.pattern, '--level', input.level ?? 'L1'];
+    if (input.cadence)
+        args.push('--cadence', input.cadence);
+    if (input.conservative)
+        args.push('--conservative');
+    const { stdout, stderr, code } = await runCostCli(cli, args);
+    if (code !== 0) {
+        throw new Error(stderr.trim() || `loop-cost exited with code ${code}.`);
+    }
+    if (!stdout.trim()) {
+        throw new Error('loop-cost produced no output.');
+    }
+    let parsed;
+    try {
+        parsed = JSON.parse(stdout);
+    }
+    catch {
+        throw new Error('loop-cost produced output that could not be parsed as JSON.');
+    }
+    const tokensPerRun = parsed.scenarios?.[scenario]?.tokensPerRun;
+    if (typeof tokensPerRun !== 'number') {
+        throw new Error(`loop-cost output missing scenarios.${scenario}.tokensPerRun.`);
+    }
+    return tokensPerRun;
+}

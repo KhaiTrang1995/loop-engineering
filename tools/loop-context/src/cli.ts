@@ -11,6 +11,11 @@ import {
   type CircuitBreakerConfig,
   type PruneConfig,
 } from './context-manager.js';
+import {
+  assertValidBudgetScenario,
+  resolveTokenBudgetFromPattern,
+  type BudgetScenario,
+} from './budget-resolver.js';
 
 type Op = 'check' | 'prune' | 'inject' | 'summary' | 'status';
 
@@ -21,6 +26,11 @@ interface Args {
   json: boolean;
   breaker: CircuitBreakerConfig;
   prune: PruneConfig;
+  budgetFromPattern?: string;
+  budgetLevel: string;
+  budgetScenario: BudgetScenario;
+  budgetCadence?: string;
+  budgetConservative: boolean;
 }
 
 /** Reject NaN/0/floats so a bad flag cannot silently disable the breaker. */
@@ -41,10 +51,20 @@ function parseArgs(argv: string[]): Args {
   let op: Op = 'status';
   let ledger: string | undefined;
   let json = false;
+  let budgetFromPattern: string | undefined;
+  let budgetLevel = 'L1';
+  let budgetScenario: BudgetScenario = 'realistic';
+  let budgetCadence: string | undefined;
+  let budgetConservative = false;
+
+  const base = () => ({
+    op, json, breaker, prune,
+    budgetFromPattern, budgetLevel, budgetScenario, budgetCadence, budgetConservative,
+  });
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--help' || a === '-h') return { help: true, op, json, breaker, prune };
+    if (a === '--help' || a === '-h') return { help: true, ...base() };
     else if (a === '--ledger' || a === '-f') ledger = argv[++i];
     else if (a === '--check') op = 'check';
     else if (a === '--prune') op = 'prune';
@@ -56,11 +76,16 @@ function parseArgs(argv: string[]): Args {
     else if (a === '--stagnation') breaker.stagnationThreshold = parsePositiveIntFlag(argv[++i], '--stagnation');
     else if (a === '--no-progress') breaker.noProgressThreshold = parsePositiveIntFlag(argv[++i], '--no-progress');
     else if (a === '--token-budget') breaker.tokenBudget = parsePositiveIntFlag(argv[++i], '--token-budget');
+    else if (a === '--budget-from-pattern') budgetFromPattern = argv[++i];
+    else if (a === '--budget-level') budgetLevel = argv[++i];
+    else if (a === '--budget-scenario') budgetScenario = argv[++i] as BudgetScenario;
+    else if (a === '--budget-cadence') budgetCadence = argv[++i];
+    else if (a === '--budget-conservative') budgetConservative = true;
     else if (a === '--window') prune.window = parsePositiveIntFlag(argv[++i], '--window');
     else if (a === '--max-trace-lines') prune.maxTraceLines = parsePositiveIntFlag(argv[++i], '--max-trace-lines');
   }
 
-  return { help: false, op, ledger, json, breaker, prune };
+  return { help: false, ledger, ...base() };
 }
 
 async function readLedger(pathArg?: string): Promise<Ledger> {
@@ -95,6 +120,7 @@ Keeps a loop's context window clean and stops runaway loops. Reads a run ledger
 Usage:
   loop-context [operation] [--ledger <file.json>] [options]
   cat ledger.json | loop-context --check
+  loop-context --check --ledger run.json --budget-from-pattern ci-sweeper --budget-level L2
 
 Operations (default: --status):
   --check      Run the circuit breaker. Exit 0 = continue, 2 = escalate.
@@ -110,6 +136,15 @@ Options:
   --stagnation <n>          Same-error repeat limit (default: ${DEFAULT_BREAKER.stagnationThreshold})
   --no-progress <n>         Consecutive-failure limit (default: ${DEFAULT_BREAKER.noProgressThreshold})
   --token-budget <n>        Total token cap (default: none)
+  --budget-from-pattern <id>
+                            Resolve the token cap from loop-cost's registry
+                            estimate instead of typing a number. Ignored if
+                            --token-budget is also given (explicit wins).
+  --budget-level <L1|L2|L3> Readiness level for --budget-from-pattern (default: L1)
+  --budget-scenario <realistic|action|report>
+                            Which loop-cost scenario to use (default: realistic)
+  --budget-cadence <spec>   Cadence override passed through to loop-cost
+  --budget-conservative     Use the slower cadence in a range (loop-cost flag)
   --window <n>              Attempts kept when pruning (default: ${DEFAULT_PRUNE.window})
   --max-trace-lines <n>     Stack-trace lines kept (default: ${DEFAULT_PRUNE.maxTraceLines})
   -h, --help                This help
@@ -126,6 +161,16 @@ async function main() {
   if (args.help) {
     console.log(HELP);
     return;
+  }
+
+  if (args.budgetFromPattern && args.breaker.tokenBudget === undefined) {
+    args.breaker.tokenBudget = await resolveTokenBudgetFromPattern({
+      pattern: args.budgetFromPattern,
+      level: args.budgetLevel,
+      scenario: args.budgetScenario,
+      cadence: args.budgetCadence,
+      conservative: args.budgetConservative,
+    });
   }
 
   const ledger = await readLedger(args.ledger);

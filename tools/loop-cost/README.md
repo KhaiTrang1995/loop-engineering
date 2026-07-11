@@ -43,16 +43,16 @@ Pair with `loop-budget.md` (scaffolded by `loop-init`) and `loop-audit` cost obs
 
 ## Feed the circuit breaker
 
-`--json` output resolves a realistic per-run token cap for
-[`loop-context`](../loop-context)'s breaker, so `--token-budget` reflects real
-pattern cost instead of a hand-typed guess (the `loop-guard` skill wires this):
+[`loop-context`](../loop-context)'s breaker can resolve `--token-budget` directly
+from a pattern's realistic per-run estimate instead of a hand-typed guess:
 
 ```bash
-BUDGET=$(npx @cobusgreyling/loop-cost --pattern ci-sweeper --level L2 --json \
-  | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>process.stdout.write(String(JSON.parse(d).scenarios.realistic.tokensPerRun)))')
-npx @cobusgreyling/loop-context --check --ledger loop-ledger.json --token-budget "$BUDGET"
+npx @cobusgreyling/loop-context --check --ledger loop-ledger.json \
+  --budget-from-pattern ci-sweeper --budget-level L2
 ```
 
-The tools stay independent — no runtime dependency, just shell wiring.
+`loop-context` shells out to this CLI's built output to do it — the packages stay
+independent at the source level, no shared runtime state. An explicit
+`--token-budget` on the `loop-context` call always overrides the derived value.
 
 See [docs/operating-loops.md](../../docs/operating-loops.md).

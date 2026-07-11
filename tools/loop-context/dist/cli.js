@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFile } from 'node:fs/promises';
 import { buildContextInjection, checkCircuitBreaker, pruneLedger, summarizeAttempts, DEFAULT_BREAKER, DEFAULT_PRUNE, } from './context-manager.js';
+import { resolveTokenBudgetFromPattern, } from './budget-resolver.js';
 /** Reject NaN/0/floats so a bad flag cannot silently disable the breaker. */
 function parsePositiveIntFlag(raw, flag) {
     if (raw === undefined || raw === '') {
@@ -18,10 +19,19 @@ function parseArgs(argv) {
     let op = 'status';
     let ledger;
     let json = false;
+    let budgetFromPattern;
+    let budgetLevel = 'L1';
+    let budgetScenario = 'realistic';
+    let budgetCadence;
+    let budgetConservative = false;
+    const base = () => ({
+        op, json, breaker, prune,
+        budgetFromPattern, budgetLevel, budgetScenario, budgetCadence, budgetConservative,
+    });
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--help' || a === '-h')
-            return { help: true, op, json, breaker, prune };
+            return { help: true, ...base() };
         else if (a === '--ledger' || a === '-f')
             ledger = argv[++i];
         else if (a === '--check')
@@ -44,12 +54,22 @@ function parseArgs(argv) {
             breaker.noProgressThreshold = parsePositiveIntFlag(argv[++i], '--no-progress');
         else if (a === '--token-budget')
             breaker.tokenBudget = parsePositiveIntFlag(argv[++i], '--token-budget');
+        else if (a === '--budget-from-pattern')
+            budgetFromPattern = argv[++i];
+        else if (a === '--budget-level')
+            budgetLevel = argv[++i];
+        else if (a === '--budget-scenario')
+            budgetScenario = argv[++i];
+        else if (a === '--budget-cadence')
+            budgetCadence = argv[++i];
+        else if (a === '--budget-conservative')
+            budgetConservative = true;
         else if (a === '--window')
             prune.window = parsePositiveIntFlag(argv[++i], '--window');
         else if (a === '--max-trace-lines')
             prune.maxTraceLines = parsePositiveIntFlag(argv[++i], '--max-trace-lines');
     }
-    return { help: false, op, ledger, json, breaker, prune };
+    return { help: false, ledger, ...base() };
 }
 async function readLedger(pathArg) {
     const raw = pathArg
@@ -81,6 +101,7 @@ Keeps a loop's context window clean and stops runaway loops. Reads a run ledger
 Usage:
   loop-context [operation] [--ledger <file.json>] [options]
   cat ledger.json | loop-context --check
+  loop-context --check --ledger run.json --budget-from-pattern ci-sweeper --budget-level L2
 
 Operations (default: --status):
   --check      Run the circuit breaker. Exit 0 = continue, 2 = escalate.
@@ -96,6 +117,15 @@ Options:
   --stagnation <n>          Same-error repeat limit (default: ${DEFAULT_BREAKER.stagnationThreshold})
   --no-progress <n>         Consecutive-failure limit (default: ${DEFAULT_BREAKER.noProgressThreshold})
   --token-budget <n>        Total token cap (default: none)
+  --budget-from-pattern <id>
+                            Resolve the token cap from loop-cost's registry
+                            estimate instead of typing a number. Ignored if
+                            --token-budget is also given (explicit wins).
+  --budget-level <L1|L2|L3> Readiness level for --budget-from-pattern (default: L1)
+  --budget-scenario <realistic|action|report>
+                            Which loop-cost scenario to use (default: realistic)
+  --budget-cadence <spec>   Cadence override passed through to loop-cost
+  --budget-conservative     Use the slower cadence in a range (loop-cost flag)
   --window <n>              Attempts kept when pruning (default: ${DEFAULT_PRUNE.window})
   --max-trace-lines <n>     Stack-trace lines kept (default: ${DEFAULT_PRUNE.maxTraceLines})
   -h, --help                This help
@@ -111,6 +141,15 @@ async function main() {
     if (args.help) {
         console.log(HELP);
         return;
+    }
+    if (args.budgetFromPattern && args.breaker.tokenBudget === undefined) {
+        args.breaker.tokenBudget = await resolveTokenBudgetFromPattern({
+            pattern: args.budgetFromPattern,
+            level: args.budgetLevel,
+            scenario: args.budgetScenario,
+            cadence: args.budgetCadence,
+            conservative: args.budgetConservative,
+        });
     }
     const ledger = await readLedger(args.ledger);
     switch (args.op) {
