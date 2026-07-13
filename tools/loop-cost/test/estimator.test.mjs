@@ -5,6 +5,7 @@ import {
   cadenceToRunsPerDay,
   runsPerDayForInterval,
   estimateCost,
+  parseOrchestration,
 } from '../dist/estimator.js';
 
 const CI_SWEEPER = {
@@ -51,6 +52,56 @@ test('estimateCost: ci-sweeper 15m L2 warns on high spend', () => {
 
 test('assertValidLevel: rejects unknown level', () => {
   assert.throws(() => assertValidLevel('garbage'), /Invalid level/);
+});
+
+test('parseOrchestration: modes map to expected multipliers', () => {
+  assert.equal(parseOrchestration(undefined).multiplier, 1);
+  assert.equal(parseOrchestration('single').multiplier, 1);
+  assert.equal(parseOrchestration('maker-checker').multiplier, 2);
+  assert.equal(parseOrchestration('parallel:3').multiplier, 4);
+  assert.equal(parseOrchestration('debate:2').multiplier, 3);
+});
+
+test('parseOrchestration: rejects bad specs', () => {
+  assert.throws(() => parseOrchestration('parallel:1'), /parallel/);
+  assert.throws(() => parseOrchestration('debate:0'), /debate/);
+  assert.throws(() => parseOrchestration('garbage'), /Invalid orchestration/);
+});
+
+test('estimateCost: orchestration scales only the action path', () => {
+  const base = estimateCost({ pattern: CI_SWEEPER, cadence: '15m', level: 'L2' });
+  const mc = estimateCost({
+    pattern: CI_SWEEPER,
+    cadence: '15m',
+    level: 'L2',
+    orchestration: 'maker-checker',
+  });
+  assert.equal(mc.orchestration.mode, 'maker-checker');
+  assert.equal(mc.orchestration.multiplier, 2);
+  // action doubles; no-op and full-triage scans are untouched.
+  assert.equal(mc.scenarios.action.tokensPerRun, base.scenarios.action.tokensPerRun * 2);
+  assert.equal(mc.scenarios.noop.tokensPerRun, base.scenarios.noop.tokensPerRun);
+  assert.equal(mc.scenarios.report.tokensPerRun, base.scenarios.report.tokensPerRun);
+  // realistic blend rises because its action component is scaled.
+  assert.ok(mc.scenarios.realistic.tokensPerDay > base.scenarios.realistic.tokensPerDay);
+});
+
+test('estimateCost: default single leaves action unchanged and adds no warning', () => {
+  const r = estimateCost({ pattern: CI_SWEEPER, cadence: '15m', level: 'L2' });
+  assert.equal(r.orchestration.mode, 'single');
+  assert.equal(r.scenarios.action.tokensPerRun, CI_SWEEPER.cost.tokens_action);
+  assert.ok(!r.warnings.some((w) => /Orchestration/.test(w)));
+});
+
+test('estimateCost: deep fan-out warns', () => {
+  const r = estimateCost({
+    pattern: CI_SWEEPER,
+    cadence: '15m',
+    level: 'L2',
+    orchestration: 'parallel:4',
+  });
+  assert.equal(r.orchestration.multiplier, 5);
+  assert.ok(r.warnings.some((w) => /Orchestration/.test(w)));
 });
 
 test('estimateCost: daily-triage 1d L1 is cheap', () => {
