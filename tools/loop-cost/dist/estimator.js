@@ -4,6 +4,39 @@ export function assertValidLevel(level) {
         throw new Error(`Invalid level: ${level}. Valid: ${VALID_READINESS_LEVELS.join(', ')}`);
     }
 }
+/**
+ * Parse an orchestration spec into a multiplier on the action path.
+ *
+ * The action path (implementer + verifier work) is where multi-agent
+ * orchestration lands; the no-op scan and single triage pass are unaffected.
+ *
+ *   single         1x   one implementer pass, self-checked (default)
+ *   maker-checker  2x   implementer + an independent verifier pass
+ *   parallel:N     N+1  N candidate agents fan out, plus a merge/arbiter pass
+ *   debate:R       1+R  one proposer plus R critique-and-revise rounds
+ */
+export function parseOrchestration(spec) {
+    const s = (spec ?? 'single').trim().toLowerCase();
+    if (s === '' || s === 'single')
+        return { mode: 'single', multiplier: 1 };
+    if (s === 'maker-checker')
+        return { mode: 'maker-checker', multiplier: 2 };
+    const parallel = s.match(/^parallel:(\d+)$/);
+    if (parallel) {
+        const n = Number(parallel[1]);
+        if (n < 2)
+            throw new Error(`Invalid orchestration: parallel:N needs N>=2 (got ${n}).`);
+        return { mode: `parallel:${n}`, multiplier: n + 1 };
+    }
+    const debate = s.match(/^debate:(\d+)$/);
+    if (debate) {
+        const r = Number(debate[1]);
+        if (r < 1)
+            throw new Error(`Invalid orchestration: debate:R needs R>=1 (got ${r}).`);
+        return { mode: `debate:${r}`, multiplier: 1 + r };
+    }
+    throw new Error(`Invalid orchestration: ${spec}. Valid: single, maker-checker, parallel:N, debate:R`);
+}
 const INTERVAL_MS = {
     m: 60_000,
     h: 3_600_000,
@@ -73,12 +106,16 @@ export function estimateCost(input) {
     const runsPerDay = cadenceToRunsPerDay(cadence, input.conservative);
     const { cost, token_cost: tokenCostTier } = input.pattern;
     const mix = realisticMix(input.level, cost.early_exit_required);
+    const orchestration = parseOrchestration(input.orchestration);
+    // Orchestration overhead lands on the action path only — the no-op scan and
+    // the single triage pass do not fan out.
+    const actionPerRun = Math.round(cost.tokens_action * orchestration.multiplier);
     const noopDay = cost.tokens_noop * runsPerDay;
     const reportDay = cost.tokens_report * runsPerDay;
-    const actionDay = cost.tokens_action * runsPerDay;
+    const actionDay = actionPerRun * runsPerDay;
     const realisticPerRun = cost.tokens_noop * mix.noop +
         cost.tokens_report * mix.report +
-        cost.tokens_action * mix.action;
+        actionPerRun * mix.action;
     const realisticDay = Math.round(realisticPerRun * runsPerDay);
     const warnings = [];
     if (cost.early_exit_required) {
@@ -93,6 +130,9 @@ export function estimateCost(input) {
     if (runsPerDay >= 96) {
         warnings.push(`High cadence (${runsPerDay} runs/day) — verify early-exit is working.`);
     }
+    if (orchestration.multiplier > 2) {
+        warnings.push(`Orchestration ${orchestration.mode} multiplies action cost ${orchestration.multiplier}x — confirm the fan-out or debate depth is justified.`);
+    }
     return {
         patternId: input.pattern.id,
         patternName: input.pattern.name,
@@ -102,10 +142,11 @@ export function estimateCost(input) {
         tokenCostTier,
         suggestedDailyCap: cost.suggested_daily_cap,
         earlyExitRequired: cost.early_exit_required,
+        orchestration,
         scenarios: {
             noop: { tokensPerRun: cost.tokens_noop, tokensPerDay: noopDay },
             report: { tokensPerRun: cost.tokens_report, tokensPerDay: reportDay },
-            action: { tokensPerRun: cost.tokens_action, tokensPerDay: actionDay },
+            action: { tokensPerRun: actionPerRun, tokensPerDay: actionDay },
             realistic: {
                 tokensPerRun: Math.round(realisticPerRun),
                 tokensPerDay: realisticDay,
@@ -122,6 +163,9 @@ export function formatEstimateHuman(r) {
     lines.push('═'.repeat(50));
     lines.push(`Cadence: ${r.cadence}  →  ${r.runsPerDay} runs/day`);
     lines.push(`Level: ${r.level}  ·  Registry tier: ${r.tokenCostTier}`);
+    if (r.orchestration.multiplier > 1) {
+        lines.push(`Orchestration: ${r.orchestration.mode}  ·  action x${r.orchestration.multiplier}`);
+    }
     lines.push(`Suggested daily cap: ${formatTokens(r.suggestedDailyCap)} tokens`);
     lines.push('');
     lines.push('Daily token estimates:');

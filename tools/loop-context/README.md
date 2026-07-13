@@ -75,6 +75,31 @@ cat run.json | loop-context --check
 
 Exit codes: `0` continue · `2` escalate · `1` error.
 
+## Resolving the token budget from a pattern
+
+Typing `--token-budget <n>` by hand means guessing. [`loop-cost`](../loop-cost) already
+computes a realistic per-run estimate for every pattern and readiness level, so resolve
+the cap from there instead:
+
+```bash
+loop-context --check --ledger run.json --budget-from-pattern ci-sweeper --budget-level L2
+```
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--budget-from-pattern <id>` | none | Pattern id to look up in `loop-cost`'s registry |
+| `--budget-level <L1\|L2\|L3>` | `L1` | Readiness level passed to `loop-cost` |
+| `--budget-scenario <realistic\|action\|report>` | `realistic` | Which `loop-cost` scenario to use as the cap |
+| `--budget-cadence <spec>` | pattern default | Cadence override passed through to `loop-cost` |
+| `--budget-conservative` | off | Use the slower cadence in a range (`loop-cost`'s own flag) |
+
+An explicit `--token-budget <n>` always wins over `--budget-from-pattern` — the derived
+value only fills in when no number was typed. `loop-context` shells out to `loop-cost`'s
+built CLI (monorepo sibling first, then an installed `@cobusgreyling/loop-cost`
+dependency) — the same resolution `loop-init` already uses for `loop-audit` — so the two
+packages stay independent at the source level; an unknown pattern id surfaces
+`loop-cost`'s own error instead of failing silently.
+
 ## Populating the ledger
 
 Your loop control script appends one object per iteration to `run.json` (or pipes the same shape on stdin):
