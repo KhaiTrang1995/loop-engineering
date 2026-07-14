@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { createWorktree, markWorktree, cleanupWorktrees, gc, listWorktrees, VALID_STATUSES, } from './worktree.js';
+import { lockPaths, unlockOwner, listLocks, sweepExpiredLocks, isExpired } from './lock.js';
 function parseFlags(argv) {
-    const flags = { root: process.cwd(), force: false, json: false };
+    const flags = { root: process.cwd(), force: false, json: false, sweep: false };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--run-id')
@@ -20,6 +21,14 @@ function parseFlags(argv) {
             flags.force = true;
         else if (a === '--json')
             flags.json = true;
+        else if (a === '--paths')
+            flags.paths = argv[++i];
+        else if (a === '--owner')
+            flags.owner = argv[++i];
+        else if (a === '--ttl')
+            flags.ttl = argv[++i];
+        else if (a === '--sweep')
+            flags.sweep = true;
     }
     return flags;
 }
@@ -40,14 +49,25 @@ Usage:
   loop-worktree cleanup [--status rejected,escalated] [--older-than 24h] [--force]
   loop-worktree gc [--force] [--json]
   loop-worktree list [--status <s>] [--json]
+  loop-worktree lock   --paths <glob1,glob2,...> --owner <name> [--ttl 6h]
+  loop-worktree unlock --owner <name>
+  loop-worktree locks [--sweep] [--force] [--json]
 
 Common flags:
   --root <dir>   Repo root to operate in (default: cwd)
-  --json         Machine-readable output (list, gc)
-  --force        Allow removing worktrees with uncommitted changes / orphans
+  --json         Machine-readable output (list, gc, locks)
+  --force        Allow removing worktrees with uncommitted changes / orphans,
+                 or (with locks --sweep) deleting expired lock files
+
+Locking (advisory, not enforced by create -- pair it in your control script):
+  --paths <csv>  Comma-separated path globs this owner is about to touch
+  --owner <name> Lock/unlock identity, typically the pattern name
+  --ttl <dur>    Optional expiry (e.g. 30m, 6h, 1d); omit for no auto-expiry
+  locks --sweep  Report expired locks (report-only; --force deletes them)
 
 Worktrees live under .loop-worktrees/, tracked in .loop-worktrees/manifest.json.
-Add .loop-worktrees/ to .gitignore.`;
+Locks live under .loop-worktrees/locks/<owner>.json. Add .loop-worktrees/ to
+.gitignore.`;
 async function main() {
     const argv = process.argv.slice(2);
     const command = argv[0];
@@ -126,6 +146,52 @@ async function main() {
             }
             for (const e of entries) {
                 console.log(`${e.status.padEnd(9)} ${e.id}  ${e.branch}  (${e.pattern})`);
+            }
+            return 0;
+        }
+        case 'lock': {
+            if (!flags.paths || !flags.owner) {
+                throw new Error('lock requires --paths and --owner.');
+            }
+            const paths = flags.paths.split(',').map((p) => p.trim()).filter(Boolean);
+            const entry = await lockPaths({ root: flags.root, owner: flags.owner, paths, ttl: flags.ttl });
+            console.log(`locked ${entry.paths.join(', ')} for ${entry.owner}` + (entry.expiresAt ? ` (expires ${entry.expiresAt})` : ''));
+            return 0;
+        }
+        case 'unlock': {
+            if (!flags.owner) {
+                throw new Error('unlock requires --owner.');
+            }
+            const released = await unlockOwner(flags.root, flags.owner);
+            console.log(released ? `unlocked ${flags.owner}` : `${flags.owner} held no lock`);
+            return 0;
+        }
+        case 'locks': {
+            if (flags.sweep) {
+                const result = await sweepExpiredLocks(flags.root, { force: flags.force });
+                if (flags.json) {
+                    console.log(JSON.stringify(result, null, 2));
+                    return 0;
+                }
+                for (const l of result.expired) {
+                    console.log(result.removed.includes(l.owner) ? `removed expired lock ${l.owner}` : `expired lock ${l.owner}`);
+                }
+                console.log(`locks --sweep: ${result.expired.length} expired` +
+                    (flags.force ? `, ${result.removed.length} removed` : ' (report-only; use --force to remove)'));
+                return 0;
+            }
+            const locks = await listLocks(flags.root);
+            if (flags.json) {
+                console.log(JSON.stringify(locks.map((l) => ({ ...l, expired: isExpired(l) })), null, 2));
+                return 0;
+            }
+            if (locks.length === 0) {
+                console.log('no active locks');
+                return 0;
+            }
+            for (const l of locks) {
+                const expiryNote = l.expiresAt ? `, expires ${l.expiresAt}${isExpired(l) ? ' (expired)' : ''}` : '';
+                console.log(`${l.owner}  ${l.paths.join(', ')}  (locked ${l.lockedAt}${expiryNote})`);
             }
             return 0;
         }
