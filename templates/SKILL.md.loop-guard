@@ -52,6 +52,28 @@ npx @cobusgreyling/loop-context --check --ledger loop-ledger.json \
   --budget-from-pattern ci-sweeper --budget-level L2
 ```
 
+## Track the daily cap across runs (optional)
+
+`--budget-from-pattern` only guards a single run's ledger. `loop-budget.md`'s
+daily table ("Max tokens/day") is a cross-run cap — track it with
+`--daily-budget-from-pattern`, which accumulates spend into
+`.loop-context/daily-spend.<pattern>.json` (resets at UTC midnight) and
+escalates with trigger `daily-budget` once the pattern's suggested daily cap
+is reached, even if this run's own ledger is nowhere near its per-run budget:
+
+```bash
+npx @cobusgreyling/loop-context --check --ledger loop-ledger.json \
+  --budget-from-pattern ci-sweeper --budget-level L2 \
+  --daily-budget-from-pattern ci-sweeper \
+  --on-exceed ./scripts/on-budget-exceed.sh
+```
+
+`--on-exceed <script>` turns `loop-budget.md`'s manual "On budget exceed"
+checklist into a hook: on any escalate, the decision is piped as JSON to the
+script's stdin (fire-and-forget — the script's exit code doesn't change
+`--check`'s own). A typical script disables the scheduler, appends to
+`loop-run-log.md`, and opens a maintainer issue.
+
 ## Before each iteration
 
 1. Append the previous attempt to `loop-ledger.json`.
@@ -64,7 +86,8 @@ npx @cobusgreyling/loop-context --check --ledger loop-ledger.json \
    - **0** → continue. Optionally trim the next prompt first:
      `npx @cobusgreyling/loop-context --inject --ledger loop-ledger.json`
    - **2** → **STOP.** The breaker tripped — same error N× in a row, too many
-     consecutive failures, the token budget, or the iteration cap. Do not retry.
+     consecutive failures, the per-run or daily token budget, or the
+     iteration cap. Do not retry.
 
 ## On escalate (exit 2)
 
@@ -88,5 +111,6 @@ npx @cobusgreyling/loop-context --check --ledger loop-ledger.json \
 - `minimal-fix` / `ci-triage` — record each attempt's outcome + error in the ledger.
 - `loop-verifier` — a verifier rejection is a `failure`; log it so repeats trip the breaker.
 - `loop-constraints` — honors "escalate after N attempts"; this skill makes it mechanical.
-- `loop-budget` — the per-run budget here comes from `--budget-from-pattern`;
-  loop-budget.md still governs the *daily* cap across runs.
+- `loop-budget` — the per-run budget comes from `--budget-from-pattern`, the
+  daily cap from `--daily-budget-from-pattern`; `--on-exceed` automates the
+  "On budget exceed" steps loop-budget.md otherwise leaves manual.

@@ -12,8 +12,11 @@ export interface BudgetFromPatternInput {
 export declare function resolveCostCli(): Promise<string | null>;
 /**
  * Resolve a token budget from loop-cost's realistic per-pattern estimate
- * instead of a hand-typed number. Shells out to loop-cost's built CLI
- * (same monorepo-then-installed-dependency resolution loop-init uses for
- * loop-audit) so the two tools stay independent at the source level.
+ * instead of a hand-typed number.
  */
 export declare function resolveTokenBudgetFromPattern(input: BudgetFromPatternInput): Promise<number>;
+/**
+ * Resolve a pattern's suggested daily token cap from loop-cost, for
+ * cross-run daily spend tracking (see daily-spend.ts).
+ */
+export declare function resolveDailyBudgetFromPattern(input: BudgetFromPatternInput): Promise<number>;

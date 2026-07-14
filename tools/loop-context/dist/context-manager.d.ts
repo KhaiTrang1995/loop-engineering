@@ -64,7 +64,7 @@ export declare const DEFAULT_PRUNE: PruneConfig;
  * (line numbers, addresses, timestamps, ports, temp paths) differ.
  */
 export declare function errorSignature(error: string): string;
-export type BreakerTrigger = 'ok' | 'stagnation' | 'no-progress' | 'token-budget' | 'max-iterations';
+export type BreakerTrigger = 'ok' | 'stagnation' | 'no-progress' | 'token-budget' | 'daily-budget' | 'max-iterations';
 export interface BreakerDecision {
     /** Whether the loop is cleared to run another iteration. */
     shouldContinue: boolean;
