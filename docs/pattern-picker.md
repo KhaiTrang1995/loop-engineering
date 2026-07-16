@@ -2,6 +2,10 @@
 
 Pick one primary loop per concern. Overlapping loops need coordination — see [multi-loop.md](./multi-loop.md).
 
+Picked one? The `loop-design` skill (`templates/SKILL.md.loop-design`) walks
+through agent shape, orchestration cost, and an L1->L2->L3 progression plan
+for it before you scaffold with `loop-init`.
+
 ```mermaid
 flowchart TD
     A[What hurts right now?] --> B{CI red?}

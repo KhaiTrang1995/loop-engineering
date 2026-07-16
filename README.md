@@ -83,7 +83,7 @@ For developers using Grok, Claude Code, Codex, Cursor, and other AI coding agent
 | [Loop Engineering essay](https://cobusgreyling.substack.com/p/loop-engineering) | The concept, primitives, and Grok mapping — read for the why |
 | [Pattern Picker](docs/pattern-picker.md) | Which loop to run first — **start here if unsure** |
 | [Primitives Matrix](docs/primitives-matrix.md) | Cross-tool loop primitive mapping — bookmark this |
-| [Loop Design Checklist](docs/loop-design-checklist.md) | Ship readiness rubric |
+| [Loop Design Checklist](docs/loop-design-checklist.md) | Ship readiness rubric — or the guided `loop-design` skill (`templates/SKILL.md.loop-design`) for an interactive version that writes a design doc |
 | [Patterns](patterns/README.md) | 7 production patterns + [interactive picker](https://cobusgreyling.github.io/loop-engineering/#interactive) |
 | [Starters](starters/) | Clone-and-run kits (Grok, Claude Code, Codex, Opencode) |
 | [Opencode examples](examples/opencode/) | CLI-first loops: cron/systemd + `opencode run`, skills, worktrees |
