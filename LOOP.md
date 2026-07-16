@@ -63,6 +63,7 @@ See [docs/multi-loop.md](docs/multi-loop.md). Priority: CI Sweeper → PR Babysi
 - No auto-merge on main except trivial dependency patches (allowlist + verifier)
 - Denylist: showcase HTML/CSS, core primitives docs, audit scoring logic without human review
 - Live loop state: `STATE.md` at repo root
+- `loop-gate check` mechanically enforces the denylist + auto-merge allowlist above from `gate.yaml`; see `tools/loop-gate`
 
 ## How to run locally
 

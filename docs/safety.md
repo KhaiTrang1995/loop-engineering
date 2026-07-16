@@ -25,6 +25,12 @@ Encode in `minimal-fix` and implementer skills:
 
 > Do not modify files matching the denylist. Escalate to human with context.
 
+[`loop-gate`](../tools/loop-gate) enforces this denylist (and the auto-merge
+allowlist below) mechanically from `gate.yaml` instead of relying on the
+loop to have read this file: `loop-gate check --action <type> --paths <changed files>`
+exits `2` to escalate, `0` to proceed — same convention `loop-context --check`
+already uses, so control scripts chain both.
+
 ## Auto-Merge Policy
 
 **Default: no auto-merge.**
