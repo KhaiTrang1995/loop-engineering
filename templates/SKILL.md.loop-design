@@ -1,0 +1,102 @@
+---
+name: loop-design
+description: >
+  Design a new loop before scaffolding it. Decides single-agent vs multi-agent,
+  picks an orchestration pattern with a real cost estimate, and writes an
+  explicit L1->L2->L3 progression plan. Runs before loop-init, not during a
+  loop's operation.
+user_invocable: true
+---
+
+# Loop Design
+
+Scaffolding a loop with `loop-init` is cheap; redesigning one after it is
+running is not. This skill runs BEFORE `loop-init`, when the user has an idea
+for a loop but hasn't yet committed to its shape. It pushes for concrete
+decisions the same way `loop-intake` pushes for a concrete goal — a vague
+answer gets asked again, not accepted.
+
+Three approval gates structure the interaction (distinct from this repo's
+L1/L2/L3 *autonomy* levels below — these are about *this conversation*, not
+the loop's runtime behavior):
+
+- **Design-review gate** — runs first. Propose the goal, agent shape,
+  orchestration pattern (if any), and the L1->L2->L3 progression plan as a
+  compact summary. Wait for approval or edits before writing anything.
+- **Plan gate** — before creating the design doc file, state exactly what will
+  be written (one path) and wait for confirmation.
+- **Diff gate** — if the design doc already exists (revising an earlier run),
+  show a diff before overwriting it.
+
+Never skip a gate because "the answer seems obvious" or "we already discussed
+this in chat" — the point is a file the user can point to, not a inference
+you made on their behalf.
+
+## 1. Gather (one question at a time)
+
+Ask only what `loop-design-template.md` needs and isn't already answered:
+
+- Goal (one testable sentence) and explicit non-goals.
+- Watched scope (repos, branches, PRs, tickets).
+- Cadence intuition (urgent/frequent vs. occasional) — informs pattern choice
+  via [pattern-picker.md](../docs/pattern-picker.md).
+
+If the goal is vague, push back once for a concrete version — same discipline
+as `loop-intake`. Don't invent scope the user didn't state.
+
+## 2. Agent shape — single is the default, not multi-agent
+
+Ask explicitly: **"Does a single agent with tool access solve this, or do you
+need a maker/checker split?"** Multi-agent must be justified, not assumed.
+Reasons that justify it: the implementer must not be trusted to grade its own
+work (most fix loops), or the task genuinely benefits from parallel exploration
+or debate. "It might be more thorough" is not sufficient on its own.
+
+If multi-agent, pick an orchestration pattern and get its real cost, don't
+estimate by feel:
+
+```bash
+npx @cobusgreyling/loop-cost --pattern <id> --level <L> --orchestration <maker-checker|parallel:N|debate:R>
+```
+
+Show the realistic and worst-case (action) daily cost from the output. If the
+worst case looks unaffordable, say so and reconsider the pattern before moving
+on — don't bury the number in the design doc without flagging it.
+
+## 3. Autonomy progression — cite the tool that scores it, don't invent a rubric
+
+Write the L1->L2->L3 progression plan using `loop-audit`'s own readiness
+criteria (report-only / assisted-with-verifier / unattended-with-human-gates)
+as the exit condition for each level — not a new rubric that can drift out of
+sync. Fill in concrete numbers (how many clean runs, what N for "too many
+files") rather than leaving them as placeholders.
+
+## 4. Safety
+
+Point at the mechanical tools that will enforce this, not just prose:
+
+- `gate.yaml` / `loop-gate check` for the path denylist and auto-merge allowlist.
+- `loop-cost` + `loop-context --budget-from-pattern <id> --budget-level <L>` for
+  the token budget — pass the *same* level used for the cost estimate above,
+  or the cap silently falls back to L1's smaller default.
+- `loop-context`'s circuit breaker for stagnation/no-progress/max-iterations:
+  use its defaults (3 / 5 / 10) unless the goal or scope gives a concrete
+  reason to override one — don't invent numbers to fill the template field.
+- `loop-worktree lock` if this pattern's watched scope overlaps another
+  already-running loop's files (see [multi-loop.md](../docs/multi-loop.md)).
+
+## 5. Write the output
+
+Fill in [loop-design-template.md](loop-design-template.md) completely — no
+`{placeholder}` left unresolved — and write it to
+`docs/loop-design/{pattern-slug}.md`, only after the Plan gate is confirmed.
+
+## Interaction with other tools
+
+- Feeds `loop-init . --pattern <id> --tool <tool>` — the design doc's Goal,
+  Scope, and Safety sections become that scaffold's starting `STATE.md` and
+  `loop-budget.md` content.
+- `loop-audit . --suggest` is the objective check for whether the progression
+  plan's L1/L2 exit criteria are actually met — re-run it, don't eyeball it.
+- Does not itself operate a loop or read a run ledger — that's `loop-context`,
+  `loop-guard`, and `loop-gate`'s job once the loop exists.

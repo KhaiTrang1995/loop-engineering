@@ -2,6 +2,12 @@
 
 Use this before enabling a loop in production. Score honestly — a loop missing verification is not ready for unattended runs.
 
+Prefer to work through these decisions interactively and end up with a written
+record? The `loop-design` skill (`templates/SKILL.md.loop-design`) walks the
+same ground — agent shape, orchestration cost, and an explicit L1->L2->L3
+progression plan — and writes it to `docs/loop-design/{pattern-slug}.md`.
+This checklist is the quick static version; the skill is the guided one.
+
 ## 1. Purpose & Scope
 
 - [ ] **Single clear goal** — one sentence: what does this loop accomplish?
