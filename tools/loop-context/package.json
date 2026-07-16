@@ -15,7 +15,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc && chmod +x dist/cli.js",
+    "build": "tsc",
     "test": "npm run build && node --test test/*.test.mjs",
     "prepublishOnly": "npm test",
     "start": "node dist/cli.js"

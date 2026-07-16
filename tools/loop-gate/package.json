@@ -1,21 +1,22 @@
 {
-  "name": "@cobusgreyling/loop-init",
-  "version": "1.4.0",
-  "description": "Scaffold loop engineering patterns and starters into any project. Supports Grok, Claude Code, Codex, Opencode and more. npx @cobusgreyling/loop-init . --pattern daily-triage --tool opencode",
+  "name": "@cobusgreyling/loop-gate",
+  "version": "1.0.0",
+  "description": "Mechanical enforcement of LOOP.md/docs/safety.md's path denylist and auto-merge allowlist — evaluate a proposed change against static policy and block or allow it.",
   "type": "module",
+  "main": "dist/gate.js",
+  "exports": {
+    ".": "./dist/gate.js"
+  },
   "bin": {
-    "loop-init": "./dist/cli.js"
+    "loop-gate": "dist/cli.js"
   },
   "files": [
     "dist",
-    "starters",
-    "templates",
     "README.md"
   ],
   "scripts": {
-    "bundle": "node scripts/bundle-assets.mjs",
-    "build": "npm run bundle && tsc",
-    "test": "npm run build && node --test test/cli.test.mjs",
+    "build": "tsc",
+    "test": "npm run build && node --test test/*.test.mjs",
     "prepublishOnly": "npm test",
     "start": "node dist/cli.js"
   },
@@ -26,21 +27,19 @@
     "loop-engineering",
     "ai-agents",
     "coding-agents",
-    "scaffold",
-    "starter",
+    "safety",
+    "policy",
+    "auto-merge",
     "claude-code",
     "grok",
-    "codex",
-    "opencode",
-    "github-actions",
-    "patterns"
+    "devtools"
   ],
   "author": "Cobus Greyling",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cobusgreyling/loop-engineering.git",
-    "directory": "tools/loop-init"
+    "directory": "tools/loop-gate"
   },
   "homepage": "https://cobusgreyling.github.io/loop-engineering/",
   "bugs": {
@@ -50,10 +49,11 @@
     "access": "public"
   },
   "dependencies": {
-    "@cobusgreyling/loop-audit": "^1.5.0"
+    "minimatch": "^10.0.0",
+    "yaml": "^2.8.0"
   },
   "devDependencies": {
-    "@types/node": "^26.0.0",
-    "typescript": "^7.0.2"
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
   }
 }
