@@ -46,17 +46,14 @@ function runCostCli(cli, args) {
     });
 }
 /**
- * Resolve a token budget from loop-cost's realistic per-pattern estimate
- * instead of a hand-typed number. Shells out to loop-cost's built CLI
- * (same monorepo-then-installed-dependency resolution loop-init uses for
- * loop-audit) so the two tools stay independent at the source level.
+ * Shell out to loop-cost's built CLI (same monorepo-then-installed-dependency
+ * resolution loop-init uses for loop-audit) and parse its --json estimate.
+ * Shared by both the per-run and daily budget resolvers below.
  */
-export async function resolveTokenBudgetFromPattern(input) {
-    const scenario = input.scenario ?? 'realistic';
-    assertValidBudgetScenario(scenario);
+async function invokeLoopCost(input) {
     const cli = await resolveCostCli();
     if (!cli) {
-        throw new Error('--budget-from-pattern requires @cobusgreyling/loop-cost. Install it, or run from the loop-engineering monorepo.');
+        throw new Error('Resolving a budget from a pattern requires @cobusgreyling/loop-cost. Install it, or run from the loop-engineering monorepo.');
     }
     const args = ['--pattern', input.pattern, '--level', input.level ?? 'L1'];
     if (input.cadence)
@@ -70,16 +67,36 @@ export async function resolveTokenBudgetFromPattern(input) {
     if (!stdout.trim()) {
         throw new Error('loop-cost produced no output.');
     }
-    let parsed;
     try {
-        parsed = JSON.parse(stdout);
+        return JSON.parse(stdout);
     }
     catch {
         throw new Error('loop-cost produced output that could not be parsed as JSON.');
     }
+}
+/**
+ * Resolve a token budget from loop-cost's realistic per-pattern estimate
+ * instead of a hand-typed number.
+ */
+export async function resolveTokenBudgetFromPattern(input) {
+    const scenario = input.scenario ?? 'realistic';
+    assertValidBudgetScenario(scenario);
+    const parsed = await invokeLoopCost(input);
     const tokensPerRun = parsed.scenarios?.[scenario]?.tokensPerRun;
     if (typeof tokensPerRun !== 'number') {
         throw new Error(`loop-cost output missing scenarios.${scenario}.tokensPerRun.`);
     }
     return tokensPerRun;
+}
+/**
+ * Resolve a pattern's suggested daily token cap from loop-cost, for
+ * cross-run daily spend tracking (see daily-spend.ts).
+ */
+export async function resolveDailyBudgetFromPattern(input) {
+    const parsed = await invokeLoopCost(input);
+    const dailyCap = parsed.suggestedDailyCap;
+    if (typeof dailyCap !== 'number') {
+        throw new Error('loop-cost output missing suggestedDailyCap.');
+    }
+    return dailyCap;
 }

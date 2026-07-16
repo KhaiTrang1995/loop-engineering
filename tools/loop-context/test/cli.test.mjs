@@ -3,8 +3,17 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { resolveDailyBudgetFromPattern } from '../dist/budget-resolver.js';
 
-const cli = path.join(path.dirname(fileURLToPath(import.meta.url)), '../dist/cli.js');
+const testDir = path.dirname(fileURLToPath(import.meta.url));
+const cli = path.join(testDir, '../dist/cli.js');
+const onExceedCaptureScript = path.join(testDir, 'fixtures/on-exceed-capture.mjs');
+
+async function freshDir() {
+  return mkdtemp(path.join(tmpdir(), 'loop-context-cli-daily-'));
+}
 
 const stagnationLedger = JSON.stringify({
   goal: 'x',
@@ -82,4 +91,66 @@ test('cli --budget-from-pattern surfaces loop-cost\'s unknown-pattern error', ()
   const r = runCli(['--check', '--budget-from-pattern', 'not-a-pattern'], cheapLedger);
   assert.equal(r.status, 1);
   assert.match(r.stderr, /Unknown pattern: not-a-pattern/);
+});
+
+test('cli --daily-budget-from-pattern escalates once the daily cap is reached', async () => {
+  const dir = await freshDir();
+  const dailyCap = await resolveDailyBudgetFromPattern({ pattern: 'ci-sweeper', level: 'L2' });
+  // Pre-seed today's spend right at the cap so this run's single-token delta tips it over.
+  await writeFile(
+    path.join(dir, 'daily-spend.ci-sweeper.json'),
+    JSON.stringify({ date: new Date().toISOString().slice(0, 10), tokensUsedToday: dailyCap }),
+  );
+
+  const r = runCli(
+    [
+      '--check', '--daily-budget-from-pattern', 'ci-sweeper', '--budget-level', 'L2',
+      '--daily-state-dir', dir, '--json',
+    ],
+    cheapLedger,
+  );
+  assert.equal(r.status, 2);
+  const decision = JSON.parse(r.stdout);
+  assert.equal(decision.trigger, 'daily-budget');
+});
+
+test('cli --daily-budget-from-pattern does not override an existing per-run trigger', async () => {
+  const dir = await freshDir();
+  const dailyCap = await resolveDailyBudgetFromPattern({ pattern: 'ci-sweeper', level: 'L2' });
+  await writeFile(
+    path.join(dir, 'daily-spend.ci-sweeper.json'),
+    JSON.stringify({ date: new Date().toISOString().slice(0, 10), tokensUsedToday: dailyCap * 10 }),
+  );
+
+  const r = runCli([
+    '--check', '--daily-budget-from-pattern', 'ci-sweeper', '--budget-level', 'L2',
+    '--daily-state-dir', dir, '--json',
+  ]);
+  assert.equal(r.status, 2);
+  const decision = JSON.parse(r.stdout);
+  assert.equal(decision.trigger, 'stagnation');
+});
+
+test('cli --on-exceed pipes the escalation decision to the script as JSON', async () => {
+  const dir = await freshDir();
+  const outFile = path.join(dir, 'captured.json');
+
+  const r = runCli(['--check', '--on-exceed', `node ${onExceedCaptureScript} ${outFile}`, '--json']);
+  assert.equal(r.status, 2);
+
+  const captured = JSON.parse(await readFile(outFile, 'utf8'));
+  assert.equal(captured.trigger, 'stagnation');
+  assert.equal(captured.escalate, true);
+});
+
+test('cli --on-exceed is not invoked when the run continues', async () => {
+  const dir = await freshDir();
+  const outFile = path.join(dir, 'should-not-exist.json');
+
+  const r = runCli(
+    ['--check', '--on-exceed', `node ${onExceedCaptureScript} ${outFile}`, '--json'],
+    cheapLedger,
+  );
+  assert.equal(r.status, 0);
+  await assert.rejects(() => readFile(outFile, 'utf8'));
 });

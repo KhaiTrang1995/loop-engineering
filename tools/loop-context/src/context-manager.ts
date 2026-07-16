@@ -103,6 +103,7 @@ export type BreakerTrigger =
   | 'stagnation'
   | 'no-progress'
   | 'token-budget'
+  | 'daily-budget'
   | 'max-iterations';
 
 export interface BreakerDecision {

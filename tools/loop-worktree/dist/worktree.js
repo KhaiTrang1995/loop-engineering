@@ -111,10 +111,11 @@ export async function markWorktree(input) {
     await writeManifest(root, manifest);
     return entry;
 }
-function parseInterval(token) {
+/** Parse a duration like "30m", "24h", "7d" into milliseconds. Shared with lock.ts's --ttl. */
+export function parseDurationMs(token, flag) {
     const m = /^(\d+)([mhd])$/.exec(token.trim());
     if (!m) {
-        throw new Error(`Invalid --older-than "${token}". Use e.g. 30m, 24h, 7d.`);
+        throw new Error(`Invalid ${flag} "${token}". Use e.g. 30m, 24h, 7d.`);
     }
     const n = Number(m[1]);
     const unit = m[2];
@@ -125,7 +126,7 @@ export async function cleanupWorktrees(input) {
     const { root } = input;
     await assertGitRepo(root);
     const statuses = input.statuses ?? CLEANUP_DEFAULT_STATUSES;
-    const cutoff = input.olderThan ? Date.now() - parseInterval(input.olderThan) : undefined;
+    const cutoff = input.olderThan ? Date.now() - parseDurationMs(input.olderThan, '--older-than') : undefined;
     const manifest = await readManifest(root);
     const removed = [];
     const skipped = [];

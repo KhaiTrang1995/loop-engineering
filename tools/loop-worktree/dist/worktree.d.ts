@@ -34,6 +34,8 @@ export interface MarkInput {
     status: WorktreeStatus;
 }
 export declare function markWorktree(input: MarkInput): Promise<WorktreeEntry>;
+/** Parse a duration like "30m", "24h", "7d" into milliseconds. Shared with lock.ts's --ttl. */
+export declare function parseDurationMs(token: string, flag: string): number;
 export interface CleanupInput {
     root: string;
     statuses?: WorktreeStatus[];

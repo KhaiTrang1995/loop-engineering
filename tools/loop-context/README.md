@@ -100,6 +100,37 @@ dependency) — the same resolution `loop-init` already uses for `loop-audit` �
 packages stay independent at the source level; an unknown pattern id surfaces
 `loop-cost`'s own error instead of failing silently.
 
+## Tracking a daily cap across separate runs
+
+`--budget-from-pattern` only guards one run's ledger. Patterns also have a **daily**
+cap (`loop-cost`'s `suggestedDailyCap`) that spans many runs across a day —
+`--daily-budget-from-pattern` tracks that:
+
+```bash
+loop-context --check --ledger run.json --daily-budget-from-pattern ci-sweeper \
+  --budget-level L2 --on-exceed ./scripts/on-budget-exceed.sh
+```
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--daily-budget-from-pattern <id>` | none | Pattern id whose cumulative daily spend to track and cap |
+| `--daily-state-dir <dir>` | `.loop-context` | Where `daily-spend.<pattern>.json` is kept |
+| `--on-exceed <script>` | none | On any escalate, pipe the `BreakerDecision` as JSON to this script's stdin |
+
+Each `--check` call adds the ledger's newest attempt's `tokensUsed` to a per-pattern
+state file (`daily-spend.<pattern-id>.json`, `{ "date": "...", "tokensUsedToday": N }`),
+rolling over to zero when the stored date isn't today (UTC). Once the running total
+reaches the pattern's suggested daily cap, `--check` escalates with trigger
+`daily-budget` — but only if no per-run trigger (stagnation, no-progress, token-budget,
+max-iterations) already fired; per-run reasons always take priority. `--budget-level`,
+`--budget-cadence`, and `--budget-conservative` (shared with `--budget-from-pattern`)
+shape the daily-cap lookup too.
+
+`--on-exceed <script>` fires on **any** escalate, not just `daily-budget` — it's a
+generic hook for automating `loop-budget.md`'s "On budget exceed" checklist (pause
+schedulers, log the event, notify a human) instead of doing those steps by hand. The
+script's exit code is not checked and does not change `--check`'s own exit code.
+
 ## Populating the ledger
 
 Your loop control script appends one object per iteration to `run.json` (or pipes the same shape on stdin):

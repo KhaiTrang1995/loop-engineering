@@ -51,6 +51,13 @@ Each action loop should write `acting_on: branch-or-pr-id` in its state file. Be
 1. Read all other pattern state files
 2. If another loop `acting_on` matches → skip and log to `loop-run-log.md`
 
+[`loop-worktree`](../tools/loop-worktree) codifies this as an advisory lock instead of a
+hand-checked convention: a loop's control script runs `loop-worktree lock --paths
+<globs> --owner <pattern>` before spawning a worktree, and `loop-worktree unlock --owner
+<pattern>` once done. `loop-worktree create` does not check locks itself — the two stay
+paired by convention in the control script, the same way `loop-context --check` and
+`loop-worktree mark --status escalated` are paired.
+
 ## Human inbox
 
 Use a shared section in `STATE.md`:
