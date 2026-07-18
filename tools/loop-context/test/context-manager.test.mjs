@@ -7,6 +7,7 @@ import {
   pruneLedger,
   summarizeAttempts,
   buildContextInjection,
+  calculateSimilarity,
   DEFAULT_BREAKER,
   DEFAULT_PRUNE,
 } from '../dist/context-manager.js';
@@ -39,6 +40,23 @@ test('errorSignature keeps genuinely different errors distinct', () => {
   assert.notEqual(a, b);
 });
 
+// ── calculateSimilarity ────────────────────────────────────────────
+
+test('calculateSimilarity returns 1.0 for identical strings', () => {
+  assert.equal(calculateSimilarity('foo', 'foo'), 1.0);
+});
+
+test('calculateSimilarity detects high overlap in phrasing', () => {
+  const a = 'Error: connect ECONNREFUSED 127.0.0.1:5432';
+  const b = 'Error: connection refused on 127.0.0.1:5432';
+  const sim = calculateSimilarity(a, b);
+  assert.ok(sim > 0.4 && sim < 1.0, `Similarity was ${sim}`);
+});
+
+test('calculateSimilarity returns 0.0 for completely disjoint strings', () => {
+  assert.equal(calculateSimilarity('abc', 'xyz'), 0.0);
+});
+
 // ── circuit breaker: stagnation ────────────────────────────────────
 
 test('breaker trips on stagnation (same error 3× in a row)', () => {
@@ -52,6 +70,17 @@ test('breaker trips on stagnation (same error 3× in a row)', () => {
   assert.equal(d.escalate, true);
   assert.equal(d.trigger, 'stagnation');
   assert.equal(d.shouldContinue, false);
+});
+
+test('breaker trips on stagnation with slightly different wording', () => {
+  const l = ledger([
+    attempt(1, 'failure', { error: 'Error: connection timeout on port 8080' }),
+    attempt(2, 'failure', { error: 'Error: timeout on port 8080' }),
+    attempt(3, 'failure', { error: 'Error: socket timeout on port 8080' }),
+  ]);
+  const d = checkCircuitBreaker(l, { ...DEFAULT_BREAKER, similarityThreshold: 0.5 });
+  assert.equal(d.escalate, true);
+  assert.equal(d.trigger, 'stagnation');
 });
 
 test('breaker does not trip when errors differ each time', () => {
@@ -152,6 +181,17 @@ test('pruneLedger collapses consecutive identical failures with a count', () => 
   assert.equal(pruned.attempts[0].iteration, 3);
 });
 
+test('pruneLedger collapses near-duplicate failures based on similarity', () => {
+  const l = ledger([
+    attempt(1, 'failure', { error: 'Error: connection timeout on port 8080' }),
+    attempt(2, 'failure', { error: 'Error: timeout on port 8080' }),
+    attempt(3, 'failure', { error: 'Error: socket timeout on port 8080' }),
+  ]);
+  const pruned = pruneLedger(l, { ...DEFAULT_PRUNE, window: 5, similarityThreshold: 0.5 });
+  assert.equal(pruned.attempts.length, 1);
+  assert.equal(pruned.attempts[0].repeated, 3);
+});
+
 test('pruneLedger does not mutate the input ledger', () => {
   const l = ledger([attempt(1, 'failure', { error: 'x'.repeat(10) + '\n'.repeat(20) })]);
   const before = JSON.stringify(l);
@@ -174,6 +214,17 @@ test('summarizeAttempts groups errors by signature, most frequent first', () => 
   assert.equal(s.successes, 1);
   assert.equal(s.distinctErrors[0].count, 2, 'ECONNREFUSED collapses to one group of 2');
   assert.deepEqual(s.actionsTried, ['run migration', 'patch code']);
+});
+
+test('summarizeAttempts groups errors by similarity', () => {
+  const l = ledger([
+    attempt(1, 'failure', { error: 'Error: connection timeout on port 8080' }),
+    attempt(2, 'failure', { error: 'Error: timeout on port 8080' }),
+    attempt(3, 'failure', { error: 'Error: totally different error' }),
+  ]);
+  const s = summarizeAttempts(l, 0.5);
+  assert.equal(s.distinctErrors.length, 2);
+  assert.equal(s.distinctErrors[0].count, 2);
 });
 
 // ── injection ──────────────────────────────────────────────────────

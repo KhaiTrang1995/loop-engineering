@@ -53,6 +53,8 @@ export interface CircuitBreakerConfig {
   noProgressThreshold: number;
   /** Optional hard cap on cumulative tokens across the run. */
   tokenBudget?: number;
+  /** Float 0.0-1.0. If consecutive errors are this similar, they count as stagnant. */
+  similarityThreshold: number;
 }
 
 export interface PruneConfig {
@@ -60,17 +62,21 @@ export interface PruneConfig {
   maxTraceLines: number;
   /** Number of most-recent attempts to retain in the pruned ledger. */
   window: number;
+  /** Float 0.0-1.0. If consecutive errors are this similar, they are collapsed. */
+  similarityThreshold: number;
 }
 
 export const DEFAULT_BREAKER: CircuitBreakerConfig = {
   maxIterations: 10,
   stagnationThreshold: 3,
   noProgressThreshold: 5,
+  similarityThreshold: 0.85,
 };
 
 export const DEFAULT_PRUNE: PruneConfig = {
   maxTraceLines: 8,
   window: 5,
+  similarityThreshold: 0.85,
 };
 
 // ── Error normalization ────────────────────────────────────────────
@@ -94,6 +100,34 @@ export function errorSignature(error: string): string {
     .replace(/\b\d+\b/g, '#') // any remaining numbers (ports, ids, counts)
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/** 
+ * Calculate Jaccard similarity (0.0 to 1.0) using character trigrams.
+ * Highly robust to minor phrasing variations.
+ */
+function getTrigrams(str: string): Set<string> {
+  const trigrams = new Set<string>();
+  const padded = `  ${str.toLowerCase()}  `;
+  for (let i = 0; i < padded.length - 2; i++) {
+    trigrams.add(padded.substring(i, i + 3));
+  }
+  return trigrams;
+}
+
+export function calculateSimilarity(a: string, b: string): number {
+  if (a === b) return 1.0;
+  const setA = getTrigrams(a);
+  const setB = getTrigrams(b);
+  if (setA.size === 0 && setB.size === 0) return 1.0;
+  if (setA.size === 0 || setB.size === 0) return 0.0;
+  
+  let intersection = 0;
+  for (const item of setA) {
+    if (setB.has(item)) intersection++;
+  }
+  const union = setA.size + setB.size - intersection;
+  return intersection / union;
 }
 
 // ── Circuit breaker ────────────────────────────────────────────────
@@ -154,7 +188,8 @@ export function checkCircuitBreaker(
     const lastSig = errorSignature(failRun[failRun.length - 1].error ?? '');
     let same = 0;
     for (let i = failRun.length - 1; i >= 0; i--) {
-      if (errorSignature(failRun[i].error ?? '') === lastSig) same++;
+      const curSig = errorSignature(failRun[i].error ?? '');
+      if (calculateSimilarity(curSig, lastSig) >= config.similarityThreshold) same++;
       else break;
     }
     if (same >= config.stagnationThreshold) {
@@ -244,7 +279,7 @@ export function pruneLedger(ledger: Ledger, config: PruneConfig = DEFAULT_PRUNE)
       prev !== undefined &&
       prev.outcome === 'failure' &&
       pruned.outcome === 'failure' &&
-      errorSignature(prev.error ?? '') === errorSignature(pruned.error ?? '');
+      calculateSimilarity(errorSignature(prev.error ?? ''), errorSignature(pruned.error ?? '')) >= config.similarityThreshold;
 
     if (sameFailure) {
       prev.repeated = (prev.repeated ?? 1) + 1;
@@ -278,7 +313,7 @@ export interface AttemptSummary {
 }
 
 /** Deterministic factual rollup of the whole run — no LLM required. */
-export function summarizeAttempts(ledger: Ledger): AttemptSummary {
+export function summarizeAttempts(ledger: Ledger, similarityThreshold: number = 0.85): AttemptSummary {
   const groups = new Map<string, ErrorGroup>();
   const actions = new Set<string>();
   let successes = 0;
@@ -293,9 +328,17 @@ export function summarizeAttempts(ledger: Ledger): AttemptSummary {
       failures++;
       if (a.error) {
         const sig = errorSignature(a.error);
-        const existing = groups.get(sig);
-        if (existing) existing.count++;
-        else groups.set(sig, { signature: sig, count: 1, sample: a.error.split('\n')[0].trim() });
+        let found = false;
+        for (const existing of groups.values()) {
+          if (calculateSimilarity(existing.signature, sig) >= similarityThreshold) {
+            existing.count++;
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          groups.set(sig, { signature: sig, count: 1, sample: a.error.split('\n')[0].trim() });
+        }
       }
     }
   }
@@ -323,7 +366,7 @@ export function buildContextInjection(
   breaker: CircuitBreakerConfig = DEFAULT_BREAKER,
   prune: PruneConfig = DEFAULT_PRUNE,
 ): string {
-  const summary = summarizeAttempts(ledger);
+  const summary = summarizeAttempts(ledger, breaker.similarityThreshold);
   const decision = checkCircuitBreaker(ledger, breaker);
   const pruned = pruneLedger(ledger, prune);
   const lines: string[] = [];

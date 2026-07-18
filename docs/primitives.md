@@ -95,3 +95,5 @@ You then add:
 - Connectors when you want it to drive tickets and PRs instead of just suggesting
 
 The best loops are the ones where each new primitive is added only when the previous version has proven its value (and its failure modes).
+
+See [architecture-diagrams.md](architecture-diagrams.md) for how these primitives map onto the actual `tools/` packages, plus the run-lifecycle and sequence diagrams.
