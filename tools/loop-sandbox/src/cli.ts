@@ -106,7 +106,10 @@ Usage:
   loop-sandbox review                        List isolated patches ready for human review.
   
 Options for 'run':
-  --shell      Run the command inside a shell environment (shell: true)
+  --shell      Force the command to run inside a shell environment
+               (needed for shell built-ins like "bash -c"; on Windows,
+               npm-installed .cmd shims like npx/tsc retry through a shell
+               automatically on ENOENT, so this is rarely needed there)
   --base       The base branch to branch the worktree from (default: current HEAD)
   
 Examples:

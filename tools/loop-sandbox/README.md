@@ -49,7 +49,7 @@ loop-sandbox <command> [options]
 
 | Option | Description |
 |--------|-------------|
-| `--shell` | Spawns the command using `shell: true` (for bash -c, etc.) |
+| `--shell` | Forces `shell: true` (for `bash -c`, etc.). On Windows, npm-installed `.cmd` shims (`npx`, `tsc`, ...) that fail with `ENOENT` are automatically retried through a shell, so this is rarely needed there. |
 | `--base <branch>` | The base branch for the worktree (defaults to current HEAD) |
 
 ### Examples
