@@ -37,13 +37,18 @@ jobs:
             echo "# Issue Triage State\n\nLast run: never\nOpen actionable: 0\n\n## Top 5\n\n## Proposed Labels (L1 — not applied)\n" > issue-triage-state.md
           fi
 
-      # Replace with your agent invocation (Codex CLI, repository_dispatch, Grok/Claude runner)
-      - name: Run issue-triage agent
-        run: |
-          echo "::notice::Wire this step to your agent harness."
-          echo "Prompt: Run issue-triage skill. Update issue-triage-state.md."
-          echo "Week 1: propose labels and priority only — no auto-apply or close."
-          echo "See examples/github-actions/README.md and examples/grok/issue-triage.md"
+      # Replace with your agent invocation (e.g., Codex CLI, Grok/Claude runner)
+      - name: Invoke Issue Triage Agent
+        uses: cobusgreyling/loop-engineering/tools/loop-action@main
+        with:
+          pattern: 'issue-triage'
+          level: 'L1'
+          sandbox-shell: 'true'
+          command: |
+            echo "::notice::Wire this step to your agent harness."
+            echo "Prompt: Run issue-triage skill. Update issue-triage-state.md."
+            echo "Week 1: propose labels and priority only — no auto-apply or close."
+            echo "See examples/github-actions/README.md and examples/grok/issue-triage.md"
 
       - name: Upload state artifact
         uses: actions/upload-artifact@v4
