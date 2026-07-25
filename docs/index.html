@@ -36,6 +36,7 @@ title: Loop Engineering — Showcase
       },
     });
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
@@ -77,7 +78,7 @@ title: Loop Engineering — Showcase
   <div class="badge">Open source · Tool-agnostic · Production-ready · L3 dogfood · 7 patterns · Interactive tools</div>
   <h1>Stop prompting.<br>Design the loop.<br>Get a score.</h1>
   <p class="lead">
-    Run one command in any repo. <code>loop-init</code> scaffolds your loop and prints your <strong>Loop Ready</strong> score plus the first run line.
+    Run one command in any repo. <code>@cobusgreyling/loop</code> is the front door (<code>init</code> + <code>doctor</code>). <code>loop-init</code> still works. Prints your <strong>Loop Ready</strong> score plus the first run line.
   </p>
   <div class="code-block" style="max-width:720px;margin:0 auto 24px;">
     <div class="code-header">
@@ -85,7 +86,8 @@ title: Loop Engineering — Showcase
       <span>terminal — try now</span>
       <button onclick="copyNpxInit()" class="copy-btn">Copy</button>
     </div>
-    <pre>npx @cobusgreyling/loop-init .</pre>
+    <pre>npx @cobusgreyling/loop init .
+npx @cobusgreyling/loop doctor .</pre>
   </div>
   <div class="hero-cta">
     <a href="#start" class="btn btn-primary">Try in 60 seconds →</a>
@@ -312,7 +314,7 @@ flowchart TB
     end
 
     subgraph Tooling["CLIs + connectors"]
-        Init[loop-init: scaffold]
+        Init[loop init: scaffold]
         Audit[loop-audit: readiness score]
         MCP[MCP server: read-only policy + tools]
     end
@@ -461,7 +463,7 @@ flowchart TB
       <span>terminal — minimal loop</span>
     </div>
     <pre><span class="comment"># Scaffold starter (or copy manually)</span>
-npx @cobusgreyling/loop-init . --pattern daily-triage --tool grok
+npx @cobusgreyling/loop init . --pattern daily-triage --tool grok
 
 <span class="comment"># Score loop readiness (PRs get audit comments in CI)</span>
 npx @cobusgreyling/loop-audit . --suggest
@@ -616,6 +618,27 @@ npx @cobusgreyling/loop-audit . --suggest
   </div>
 </div>
 
+<section id="telemetry" class="wrap">
+  <p class="section-label">Dogfooding</p>
+  <h2 class="section-title">Live Telemetry</h2>
+  <p class="section-desc">Machine-readable data rendered directly from <a href="https://github.com/cobusgreyling/loop-engineering/blob/main/loop-run-log.md"><code>loop-run-log.md</code></a>. This repo runs loops.</p>
+  
+  <div class="telemetry-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-top: 32px; margin-bottom: 40px;">
+    <div class="card" style="padding: 20px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px;">
+      <h3 style="font-size: 1rem; margin-bottom: 16px; color: var(--text-muted);">Loop Readiness Score</h3>
+      <canvas id="scoreChart" height="200"></canvas>
+    </div>
+    <div class="card" style="padding: 20px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px;">
+      <h3 style="font-size: 1rem; margin-bottom: 16px; color: var(--text-muted);">Cumulative Tokens (Estimate)</h3>
+      <canvas id="tokenChart" height="200"></canvas>
+    </div>
+    <div class="card" style="padding: 20px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px;">
+      <h3 style="font-size: 1rem; margin-bottom: 16px; color: var(--text-muted);">Automated vs Escalated Runs</h3>
+      <canvas id="escalationChart" height="200"></canvas>
+    </div>
+  </div>
+</section>
+
 <section id="adopters" class="wrap">
   <p class="section-label">Community</p>
   <h2 class="section-title">Adopters</h2>
@@ -650,6 +673,11 @@ npx @cobusgreyling/loop-audit . --suggest
       <p class="adopter-meta">Issue Triage + Daily Triage · Grok · <strong>L1</strong></p>
       <p class="adopter-note">Propose labels only week one; pairs with morning STATE.md triage.</p>
     </article>
+    <article class="adopter-card card">
+      <h4><a href="https://github.com/caioribeiroclw-pixel/pluribus">Pluribus</a></h4>
+      <p class="adopter-meta">Daily Triage · Issue Triage · Mixed (OpenClaw) · <strong>L2</strong></p>
+      <p class="adopter-note">Hourly market/adoption research loop; durable state in control plane &amp; evidence boundaries.</p>
+    </article>
     <article class="adopter-card card adopter-placeholder">
       <h4>Your project here</h4>
       <p class="adopter-meta">Pattern · Tool · Level</p>
@@ -678,7 +706,7 @@ npx @cobusgreyling/loop-audit . --suggest
 <script>
 // Copy helpers for hero
 function copyNpxInit() {
-  const txt = 'npx @cobusgreyling/loop-init .';
+  const txt = 'npx @cobusgreyling/loop init .';
   navigator.clipboard.writeText(txt).then(() => {
     const b = event.currentTarget; // best effort
   });
@@ -791,7 +819,7 @@ const PATTERNS = {
     patternId: 'ci-sweeper',
     costLevel: 'L2',
     costCadence: '15m',
-    npx: 'npx @cobusgreyling/loop-init . --pattern ci-sweeper --tool grok',
+    npx: 'npx @cobusgreyling/loop init . --pattern ci-sweeper --tool grok',
     loop: '/loop 15m Run ci-triage on failing CI. Update ci-sweeper-state.md. Fix only regressions in worktree. Max 3 attempts.',
     patternHref: 'https://github.com/cobusgreyling/loop-engineering/blob/main/patterns/ci-sweeper.md',
     starterHref: 'https://github.com/cobusgreyling/loop-engineering/tree/main/starters/ci-sweeper'
@@ -802,7 +830,7 @@ const PATTERNS = {
     patternId: 'pr-babysitter',
     costLevel: 'L1',
     costCadence: '10m',
-    npx: 'npx @cobusgreyling/loop-init . --pattern pr-babysitter --tool grok',
+    npx: 'npx @cobusgreyling/loop init . --pattern pr-babysitter --tool grok',
     loop: '/loop 10m Run pr-review-triage. Update pr-babysitter-state.md. Worktree + verifier. No auto-merge by default.',
     patternHref: 'https://github.com/cobusgreyling/loop-engineering/blob/main/patterns/pr-babysitter.md',
     starterHref: 'https://github.com/cobusgreyling/loop-engineering/tree/main/starters/pr-babysitter'
@@ -813,7 +841,7 @@ const PATTERNS = {
     patternId: 'daily-triage',
     costLevel: 'L1',
     costCadence: '1d',
-    npx: 'npx @cobusgreyling/loop-init . --pattern daily-triage --tool grok',
+    npx: 'npx @cobusgreyling/loop init . --pattern daily-triage --tool grok',
     loop: '/loop 1d Run loop-triage. Update STATE.md. No auto-fix in week one.',
     patternHref: 'https://github.com/cobusgreyling/loop-engineering/blob/main/patterns/daily-triage.md',
     starterHref: 'https://github.com/cobusgreyling/loop-engineering/tree/main/starters/minimal-loop'
@@ -824,7 +852,7 @@ const PATTERNS = {
     patternId: 'dependency-sweeper',
     costLevel: 'L2',
     costCadence: '6h',
-    npx: 'npx @cobusgreyling/loop-init . --pattern dependency-sweeper --tool grok',
+    npx: 'npx @cobusgreyling/loop init . --pattern dependency-sweeper --tool grok',
     loop: '/loop 6h Run dependency-triage. Patch-only auto-fix in worktree + verifier. Escalate majors.',
     patternHref: 'https://github.com/cobusgreyling/loop-engineering/blob/main/patterns/dependency-sweeper.md',
     starterHref: 'https://github.com/cobusgreyling/loop-engineering/tree/main/starters/dependency-sweeper'
@@ -835,7 +863,7 @@ const PATTERNS = {
     patternId: 'post-merge-cleanup',
     costLevel: 'L1',
     costCadence: '1d',
-    npx: 'npx @cobusgreyling/loop-init . --pattern post-merge-cleanup --tool grok',
+    npx: 'npx @cobusgreyling/loop init . --pattern post-merge-cleanup --tool grok',
     loop: '/loop 1d Run post-merge-scan on recent merges. Update post-merge-state.md. Small fixes only.',
     patternHref: 'https://github.com/cobusgreyling/loop-engineering/blob/main/patterns/post-merge-cleanup.md',
     starterHref: 'https://github.com/cobusgreyling/loop-engineering/tree/main/starters/post-merge-cleanup'
@@ -846,7 +874,7 @@ const PATTERNS = {
     patternId: 'changelog-drafter',
     costLevel: 'L1',
     costCadence: '1d',
-    npx: 'npx @cobusgreyling/loop-init . --pattern changelog-drafter --tool grok',
+    npx: 'npx @cobusgreyling/loop init . --pattern changelog-drafter --tool grok',
     loop: '/loop 1d Run changelog-scan + draft-release-notes. Write RELEASE_NOTES_DRAFT.md. Human review only.',
     patternHref: 'https://github.com/cobusgreyling/loop-engineering/blob/main/patterns/changelog-drafter.md',
     starterHref: 'https://github.com/cobusgreyling/loop-engineering/tree/main/starters/changelog-drafter'
@@ -857,7 +885,7 @@ const PATTERNS = {
     patternId: 'issue-triage',
     costLevel: 'L1',
     costCadence: '1d',
-    npx: 'npx @cobusgreyling/loop-init . --pattern issue-triage --tool grok',
+    npx: 'npx @cobusgreyling/loop init . --pattern issue-triage --tool grok',
     loop: '/loop 1d Run issue-triage. Update issue-triage-state.md. Propose labels and priorities only — no auto-close.',
     patternHref: 'https://github.com/cobusgreyling/loop-engineering/blob/main/patterns/issue-triage.md',
     starterHref: 'https://github.com/cobusgreyling/loop-engineering/tree/main/starters/issue-triage'
@@ -964,7 +992,7 @@ function setupSimulator() {
     } else if (score >= 78 && hasVerifier && hasState && !costReady) {
       level = 'L2';
       assess = 'Strong signals but missing cost observability — add budget + run log before L3.';
-      reco = 'npx @cobusgreyling/loop-init . --pattern daily-triage --tool grok (scaffolds loop-budget.md + loop-run-log.md)';
+      reco = 'npx @cobusgreyling/loop init . --pattern daily-triage --tool grok (scaffolds loop-budget.md + loop-run-log.md)';
     } else if (score >= 78 && hasVerifier && hasState && costReady && !hasActivity) {
       level = 'L2';
       assess = 'Strong structure but no proven loop runs yet.';
@@ -980,7 +1008,7 @@ function setupSimulator() {
     } else {
       level = 'L0';
       assess = 'Not loop-ready — start with a starter from this repo (minimal-loop or pr-babysitter).';
-      reco = 'npx @cobusgreyling/loop-init . --pattern daily-triage --tool grok';
+      reco = 'npx @cobusgreyling/loop init . --pattern daily-triage --tool grok';
     }
 
     scoreEl.textContent = score;
@@ -1023,11 +1051,102 @@ function setupMobileNav() {
   });
 }
 
+async function renderTelemetry() {
+  try {
+    const res = await fetch('https://raw.githubusercontent.com/cobusgreyling/loop-engineering/main/loop-run-log.md');
+    const text = await res.text();
+    
+    // Parse JSON lines from the markdown file
+    const lines = text.split('\n');
+    const data = [];
+    for (const line of lines) {
+      if (line.trim().startsWith('{')) {
+        try {
+          data.push(JSON.parse(line));
+        } catch (e) {}
+      }
+    }
+    
+    if (data.length === 0) return;
+    
+    // X-axis: dates
+    const labels = data.map(d => new Date(d.run_id).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
+    
+    const scores = data.map(d => d.readiness_score || 0);
+    const tokens = data.map((d, i) => {
+      let sum = 0;
+      for (let j = 0; j <= i; j++) sum += (data[j].tokens_estimate || 0);
+      return sum;
+    });
+    const automatedRuns = data.map(d => d.outcome === 'escalated' ? 0 : 1);
+    const escalatedRuns = data.map(d => d.outcome === 'escalated' ? 1 : 0);
+    
+    // Chart options helpers
+    const chartOpts = (yCallback) => ({
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { min: 0, grid: { color: '#2a3b52' }, ticks: { color: '#8e9baebd', callback: yCallback } },
+        x: { grid: { display: false }, ticks: { color: '#8e9baebd', maxTicksLimit: 10 } }
+      }
+    });
+
+    const ctxScore = document.getElementById('scoreChart');
+    if (ctxScore) {
+      new Chart(ctxScore, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{ data: scores, borderColor: '#3ee8c5', backgroundColor: 'rgba(62, 232, 197, 0.1)', borderWidth: 2, tension: 0.1, fill: true }]
+        },
+        options: { ...chartOpts(), scales: { ...chartOpts().scales, y: { ...chartOpts().scales.y, max: 100 } } }
+      });
+    }
+
+    const ctxToken = document.getElementById('tokenChart');
+    if (ctxToken) {
+      new Chart(ctxToken, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{ data: tokens, borderColor: '#5b9dff', backgroundColor: 'rgba(91, 157, 255, 0.15)', borderWidth: 2, tension: 0.3, fill: true }]
+        },
+        options: chartOpts(v => v >= 1000 ? (v/1000) + 'k' : v)
+      });
+    }
+
+    const ctxEscalation = document.getElementById('escalationChart');
+    if (ctxEscalation) {
+      new Chart(ctxEscalation, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Automated', data: automatedRuns, backgroundColor: '#3ee8c5' },
+            { label: 'Escalated', data: escalatedRuns, backgroundColor: '#ffb347' }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { stacked: true, grid: { display: false }, ticks: { color: '#8e9baebd', maxTicksLimit: 10 } },
+            y: { stacked: true, beginAtZero: true, grid: { color: '#2a3b52' }, ticks: { color: '#8e9baebd', stepSize: 1 } }
+          }
+        }
+      });
+    }
+  } catch (e) {
+    console.error('Failed to render telemetry:', e);
+  }
+}
+
 // Boot
 document.addEventListener('DOMContentLoaded', () => {
   setupMobileNav();
   setupPatternPicker();
   setupSimulator();
+  renderTelemetry();
 });
 </script>
 

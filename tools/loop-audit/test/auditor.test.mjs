@@ -24,8 +24,11 @@ function emptySignals() {
     registry: { present: false },
     constraints: { present: false, hasConstraintsSkill: false },
     cost: { budgetDoc: false, runLog: false, loopMdBudget: false, budgetSkill: false },
-    governance: { toolScope: false, stallDetection: false, escalation: false },
+    governance: { toolScope: false, stallDetection: false, escalation: false, gateYaml: false },
     loopActivity: { present: false, evidence: [] },
+    harness: { stack: false, lock: false, sessions: false, emit: false, host: false },
+    memory: { tiers: false, budget: false },
+    fleet: { registry: false, inbox: false },
   };
 }
 
@@ -194,6 +197,96 @@ test('formatBadge: includes level and score', () => {
   assert.match(badge, /Loop Ready L2 \(72\/100\)/);
   assert.match(badge, /img\.shields\.io/);
   assert.match(badge, /loop-engineering/);
+});
+
+test('computeScore: gateYaml adds points', () => {
+  const base = emptySignals();
+  const { score: without } = computeScore(base);
+  const withGate = emptySignals();
+  withGate.governance.gateYaml = true;
+  const { score: withScore } = computeScore(withGate);
+  assert.equal(withScore - without, 3);
+});
+
+test('computeScore: harness signals add points', () => {
+  const base = emptySignals();
+  const { score: without } = computeScore(base);
+  const withHarness = emptySignals();
+  withHarness.harness = { stack: true, lock: true, sessions: true, emit: true, host: true };
+  const { score: withScore } = computeScore(withHarness);
+  assert.equal(withScore - without, 9);
+});
+
+test('auditProject: detects .foundry stack and emit hook', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'loop-audit-foundry-'));
+  try {
+    await mkdir(path.join(dir, '.foundry', 'hooks'), { recursive: true });
+    await writeFile(
+      path.join(dir, '.foundry', 'stack.yaml'),
+      'name: demo\nversion: 1.0.0\nlayers:\n  reliability:\n    - primitive: emit/outerloop-evidence\n',
+    );
+    await writeFile(
+      path.join(dir, '.foundry', 'hooks', 'outerloop.yaml'),
+      'enabled: false\nadapter: outerloop\n',
+    );
+    const result = await auditProject(dir);
+    assert.equal(result.signals.harness.stack, true);
+    assert.equal(result.signals.harness.emit, true);
+    assert.equal(result.signals.harness.sessions, false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('auditProject: missing harness recommends --with-foundry', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'loop-audit-nofoundry-'));
+  try {
+    const result = await auditProject(dir);
+    assert.equal(result.signals.harness.stack, false);
+    assert.ok(result.recommendations.some((r) => r.includes('--with-foundry') || r.includes('harness-foundry')));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('computeScore: memory signals add points', () => {
+  const base = emptySignals();
+  const { score: without } = computeScore(base);
+  const withMemory = emptySignals();
+  withMemory.memory = { tiers: true, budget: true };
+  const { score: withScore } = computeScore(withMemory);
+  assert.equal(withScore - without, 6);
+});
+
+test('auditProject: missing memory recommends --with-memory', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'loop-audit-nomemory-'));
+  try {
+    const result = await auditProject(dir);
+    assert.equal(result.signals.memory.tiers, false);
+    assert.ok(result.recommendations.some((r) => r.includes('--with-memory')));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('computeScore: fleet signals add points', () => {
+  const base = emptySignals();
+  const { score: without } = computeScore(base);
+  const withFleet = emptySignals();
+  withFleet.fleet = { registry: true, inbox: true };
+  const { score: withScore } = computeScore(withFleet);
+  assert.equal(withScore - without, 6);
+});
+
+test('auditProject: missing fleet recommends --with-fleet', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'loop-audit-nofleet-'));
+  try {
+    const result = await auditProject(dir);
+    assert.equal(result.signals.fleet.registry, false);
+    assert.ok(result.recommendations.some((r) => r.includes('--with-fleet')));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('auditProject: git commit with triage counts as loop activity', async () => {

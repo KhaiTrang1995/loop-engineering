@@ -45,16 +45,22 @@ export interface CircuitBreakerConfig {
     maxIterations: number;
     /** Escalate when the same error signature repeats this many times in a row. */
     stagnationThreshold: number;
+    /** Escalate when the agent attempts semantically similar actions this many times in a row. */
+    frustrationThreshold: number;
     /** Escalate after this many consecutive failures with no success in between. */
     noProgressThreshold: number;
     /** Optional hard cap on cumulative tokens across the run. */
     tokenBudget?: number;
+    /** Float 0.0-1.0. If consecutive errors are this similar, they count as stagnant. */
+    similarityThreshold: number;
 }
 export interface PruneConfig {
     /** Max lines to keep from any single stack trace. */
     maxTraceLines: number;
     /** Number of most-recent attempts to retain in the pruned ledger. */
     window: number;
+    /** Float 0.0-1.0. If consecutive errors are this similar, they are collapsed. */
+    similarityThreshold: number;
 }
 export declare const DEFAULT_BREAKER: CircuitBreakerConfig;
 export declare const DEFAULT_PRUNE: PruneConfig;
@@ -64,7 +70,8 @@ export declare const DEFAULT_PRUNE: PruneConfig;
  * (line numbers, addresses, timestamps, ports, temp paths) differ.
  */
 export declare function errorSignature(error: string): string;
-export type BreakerTrigger = 'ok' | 'stagnation' | 'no-progress' | 'token-budget' | 'daily-budget' | 'max-iterations';
+export declare function calculateSimilarity(a: string, b: string): number;
+export type BreakerTrigger = 'ok' | 'stagnation' | 'frustration' | 'no-progress' | 'token-budget' | 'daily-budget' | 'max-iterations';
 export interface BreakerDecision {
     /** Whether the loop is cleared to run another iteration. */
     shouldContinue: boolean;
@@ -110,7 +117,7 @@ export interface AttemptSummary {
     actionsTried: string[];
 }
 /** Deterministic factual rollup of the whole run — no LLM required. */
-export declare function summarizeAttempts(ledger: Ledger): AttemptSummary;
+export declare function summarizeAttempts(ledger: Ledger, similarityThreshold?: number): AttemptSummary;
 /**
  * Build the compact context block to prepend to the next prompt. Contains only
  * what the agent needs to make progress: the goal, what has already been tried

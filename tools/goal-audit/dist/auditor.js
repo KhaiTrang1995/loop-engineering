@@ -1,5 +1,6 @@
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fileExists, scanSkillDirectories } from '@cobusgreyling/readiness-core';
 const GOAL_FILES = ['GOAL.md', 'goal.md', 'docs/GOAL.md'];
 const GOAL_SKILL_NAMES = [
     'goal-verifier',
@@ -9,33 +10,8 @@ const GOAL_SKILL_NAMES = [
 const SAFETY_FILES = ['docs/safety.md', 'SECURITY.md', 'safety.md'];
 const BUDGET_FILES = ['goal-budget.md', 'docs/goal-budget.md'];
 const RUN_LOG_FILES = ['goal-run-log.md', 'docs/goal-run-log.md'];
-async function fileExists(p) {
-    try {
-        await stat(p);
-        return true;
-    }
-    catch {
-        return false;
-    }
-}
 async function findSkills(root) {
-    const dirs = [
-        path.join(root, '.grok', 'skills'),
-        path.join(root, '.claude', 'skills'),
-        path.join(root, '.codex', 'skills'),
-        path.join(root, 'skills'),
-    ];
-    const found = [];
-    for (const dir of dirs) {
-        if (!(await fileExists(dir)))
-            continue;
-        const entries = await readdir(dir, { withFileTypes: true });
-        for (const e of entries) {
-            if (e.isDirectory())
-                found.push(e.name);
-        }
-    }
-    return found;
+    return scanSkillDirectories(root);
 }
 async function detectTests(root) {
     const hints = [

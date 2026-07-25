@@ -189,6 +189,86 @@ aider --read diff.patch --read STATE.md \
 
 Transfer recipe: copy the tool-agnostic `SKILL.md` + state schema from this repo; map scheduling to cron, systemd, or CI until Aider is wrapped by a richer loop scheduler.
 
+## Appendix: Continue.dev
+
+Continue is available in VS Code and as the `cn` CLI. For loop work, the CLI's
+[headless mode](https://docs.continue.dev/cli/headless-mode) is the portable
+surface: it runs one prompt to completion and prints the final response, while
+the IDE extension is better suited to attended Agent or Plan sessions.
+
+| Primitive | Continue.dev mapping |
+|-----------|----------------------|
+| Scheduling | Continue has no first-class durable scheduler. Use cron, a systemd timer, or GitHub Actions to invoke `cn -p "..."`; keep the prompt, config, and state file in the repository so every run starts from the same contract. |
+| Run-until-done | `cn -p "<bounded goal and stop condition>"` runs a single headless task to completion. Use explicit validation in the prompt and a separate verifier run; Continue does not provide a durable `/goal`-style objective that survives arbitrary restarts. |
+| Skills | Put always-on project guidance in [`.continue/rules/`](https://docs.continue.dev/customize/deep-dives/rules), or load a rule/agent at launch with `--rule` / `--agent`. A repository `AGENTS.md` can hold the portable instructions, but Continue Rules are the native reusable guidance primitive rather than `SKILL.md`. |
+| Worktrees | No built-in worktree isolation. Create a standard `git worktree` per task, start one `cn` process in each worktree, and review each branch independently. |
+| Sub-agents / maker-checker | Continue does not expose a native sub-agent team or dedicated verifier role. Run the maker and checker as separate `cn` sessions (preferably in separate worktrees); give the checker read-only permissions and the current diff. TUI `/fork` forks conversation history, not an isolated coding worker. |
+| State / memory | `cn --resume` restores a previous session, but portable loop state should live in a committed `STATE.md` that every scheduled prompt reads. Use session history for convenience, not as the only durable queue or audit trail. |
+| Plugins / MCP | Configure MCP servers in `config.yaml` / `.continue/mcpServers`, attach one with `--mcp`, and restrict tools with [`--allow`, `--ask`, and `--exclude`](https://docs.continue.dev/cli/tool-permissions). Keep credentials in environment-backed secrets, never in prompts or `STATE.md`. |
+| Honest gaps | No native cron scheduler, durable cross-run goal, automatic worktree isolation, first-class sub-agents, or built-in state-file convention. Continue's [upstream repository is read-only after its final 2.0.0 release](https://docs.continue.dev/), so pin the version and validate any external automation around it. |
+
+Week-one Daily Triage, report-only:
+
+```bash
+cn -p --readonly --silent "
+Run a Daily Triage for this repository.
+Read AGENTS.md and STATE.md if they exist, inspect the current git status and diff,
+and report High Priority items, Watch List items, and evidence for each finding.
+Do not edit files, run fixes, commit, push, or open issues or pull requests.
+" > continue-daily-triage-report.md
+```
+
+The shell writes only the report artifact; Continue remains in read-only mode.
+Review the report before promoting any item to implementation.
+
+> **Human gate (L2+):** a person must approve the selected issue, allowed paths,
+> validation plan, and final diff before enabling write tools or opening a PR.
+> Keep secrets, authentication, billing, deployment, and destructive data paths
+> behind explicit per-run approval, and use a separate read-only checker session.
+
+For an L2 maker/checker handoff, run the maker in a dedicated worktree with only
+the minimum required write permissions. Then start a fresh `cn --readonly`
+session in that worktree and ask it to review `git diff`, `STATE.md`, and the
+issue acceptance criteria without editing files.
+
+## Appendix: Cline
+
+Cline spans editor extensions and a headless CLI/SDK. The loop primitives differ
+by surface: durable schedules and persistent agent teams are available in the
+CLI, SDK, and Kanban, while VS Code and JetBrains remain attended editor
+sessions for those capabilities.
+
+| Primitive | Cline mapping |
+|-----------|---------------|
+| Scheduling | The CLI has a first-class, hub-backed scheduler: [`cline schedule create`](https://docs.cline.bot/cli/scheduling) stores cron jobs that survive process restarts and run independently of a terminal. This is not currently available in the VS Code or JetBrains extensions; use the CLI/SDK scheduler or an external cron/Action for those surfaces. |
+| Skills / rules | Put on-demand `SKILL.md` packages in [`.cline/skills/<name>/`](https://docs.cline.bot/customization/skills) (workspace) or `~/.cline/skills/` (global). Put always-on project instructions in [`.clinerules/`](https://docs.cline.bot/customization/cline-rules); Cline also detects `AGENTS.md`. |
+| State | Cline persists sessions, schedule runs, and CLI/SDK team state, but it has no native `STATE.md` convention. Commit `STATE.md` at the repo root and make every scheduled prompt read the same file when the state must be portable, reviewable, and shared across tools. Cline team state under `~/.cline/data/teams/<team-name>/` supplements rather than replaces repository state. |
+| Maker / checker split | [Agent teams](https://docs.cline.bot/cli/agent-teams) provide a coordinator, specialists, and a persistent task board in CLI/SDK/Kanban; [experimental subagents](https://docs.cline.bot/features/subagents) can handle bounded research. For an independent checker, use a second approval-gated Plan session or a separately restricted SDK agent over the maker's diff—team membership alone does not enforce verifier independence. |
+| MCP | Configure and inspect servers with [`cline mcp`](https://docs.cline.bot/cli/cli-reference); CLI MCP settings live in `~/.cline/data/settings/cline_mcp_settings.json`. Keep MCP tools disabled or approval-gated for week-one triage, and never put credentials in prompts, rules, or `STATE.md`. |
+| Honest gaps | No first-class `STATE.md`; schedules and persistent teams are not available in the editor extensions; CLI team state is machine-local; and Cline's CLI can auto-approve tools, so a report-only prompt is not a substitute for an explicit permission boundary. |
+
+Week-one Daily Triage, report-only:
+
+```bash
+cline --plan --auto-approve false --json --cwd "$PWD" \
+  "Run a Daily Triage for this repository.
+Read AGENTS.md and STATE.md if present.
+Inspect repository state and report High Priority items, Watch List items,
+and evidence for each finding.
+Do not edit files, run fixes, commit, push, or write through MCP tools.
+If any required action would write, stop and report the proposed action." \
+  > cline-daily-triage-report.jsonl
+```
+
+This writes the one-shot Plan session's CLI event stream to the report artifact.
+Automatic tool approval is disabled, so review each request and deny any write
+before turning the prompt into a durable schedule.
+
+> **Human gate (L2+):** approve the selected issue, allowed paths, command/MCP
+> policy, and final diff before enabling edits or unattended runs. Run the
+> checker with write tools disabled or approval-gated; never treat a teammate's
+> self-review as independent verification.
+
 ## Appendix: Zed
 
 Zed is editor-hosted rather than a standalone loop scheduler, so map the same primitives from [Choosing a Tool](#choosing-a-tool) onto [Agent Panel](https://zed.dev/docs/ai/agent-panel) threads, [Instructions](https://zed.dev/docs/ai/instructions), [Skills](https://zed.dev/docs/ai/skills), [Agent Profiles](https://zed.dev/docs/ai/agent-profiles), [Tool Permissions](https://zed.dev/docs/ai/tool-permissions), [MCP](https://zed.dev/docs/ai/mcp) servers, [Terminal Threads](https://zed.dev/docs/ai/terminal-threads), [Tasks](https://zed.dev/docs/tasks), and [Parallel Agents](https://zed.dev/docs/ai/parallel-agents) worktrees.
@@ -261,6 +341,41 @@ A Gemini CLI daily triage loop:
 
 https://github.com/google-gemini/gemini-cli
 
+## Appendix: GitHub Copilot
+
+GitHub Copilot spans an interactive CLI and a cloud coding agent. Keep the
+loop's durable state in the repository, use PRs as the cloud agent's write
+boundary, and retain a human merge gate.
+
+| Primitive | GitHub Copilot mapping |
+|-----------|------------------------|
+| Automations / Scheduling | In an interactive Copilot CLI session, experimental [`/every` and `/after`](https://docs.github.com/en/copilot/how-tos/copilot-cli/automate-copilot-cli/schedule-prompts) schedule recurring or delayed prompts; `/loop` aliases `/every`. These schedules run only while that session is active. Use cron, Task Scheduler, or GitHub Actions with `copilot -p` for unattended cadence. |
+| Skills | Put project skills in `.github/skills/<name>/SKILL.md`, `.agents/skills/`, or `.claude/skills/`; personal skills live in `~/.copilot/skills/` or `~/.agents/skills/`. See [Adding agent skills](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/add-skills). Use `.github/agents/*.md` for specialist custom agents. |
+| State | Commit `STATE.md` as the portable source of truth. Session history or Copilot memory may supplement it, but every scheduled run should read and update the same repository file. |
+| Worktrees / isolation | Copilot CLI can create a worktree with `/worktree`. The cloud agent performs its task in an isolated sandbox and returns changes on a pull request branch; use one task/branch per independent change. |
+| Verification split | Let Copilot create the draft PR, then run CI and have a human review the diff. A separate Copilot code review can add comments, but it does not replace required human approval. By default, a user with write access must approve GitHub Actions runs on cloud-agent PRs. |
+| Connectors | Configure MCP servers and repository tools with the least privilege needed for discovery or validation. Do not grant write tools to the week-one report-only loop. |
+| Honest gaps | CLI schedules are not durable after the interactive session closes. Cloud-agent writes are PR-oriented, its internet access is restricted, workflow runs may await approval, and the agent cannot approve or merge its own pull request. |
+
+### Week-one Daily Triage (report-only)
+
+```text
+Run Daily Triage for this repository.
+
+1. Read AGENTS.md (if present) and STATE.md before doing anything else.
+2. Inspect open issues and pull requests for High Priority and Watch List items.
+3. Update only the High Priority and Watch List sections of STATE.md.
+4. Do not edit source code, workflow files, issue content, or pull requests.
+5. Report what changed and any item that needs a human decision.
+```
+
+For later code-changing levels, assign bounded work to the cloud agent and
+review the resulting draft PR. Follow GitHub's guidance to
+[review Copilot output](https://docs.github.com/en/copilot/how-tos/copilot-on-github/use-copilot-agents/review-copilot-output):
+inspect the diff, approve workflow execution only after reviewing workflow
+changes, request revisions as needed, and merge only after a human checker is
+satisfied. Never enable auto-merge as a substitute for this gate.
+
 ## Appendix: Amazon Q Developer CLI
 
 Amazon Q Developer CLI (`q chat`) is a terminal-based agent, AWS-native, with custom agent
@@ -321,3 +436,55 @@ for maker/checker separation, and `.amazonq/mcp.json` for external tools.
 ### Official Documentation
 
 https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line.html
+
+## Appendix: Devin (Cognition)
+
+Devin is a cloud-hosted autonomous AI software engineer. Map loop primitives onto its
+Scheduled Sessions, Playbooks, Connectors, Managed Devins, and Knowledge base.
+
+| Primitive | Devin mapping |
+|-----------|--------------|
+| **Scheduling** | **Scheduled Sessions** (`Settings → Schedules`): create recurring or one-time sessions (e.g., daily 07:00 UTC). For cron syntax, invoke the [Devin API](https://docs.devin.ai/api-reference/overview) (`POST /sessions`) from a GitHub Action or systemd timer. |
+| **Run-until-done** | Devin runs until the session goal is satisfied. Pair with Devin Review: Devin opens a PR, CI runs, Devin re-enters on failure and re-pushes until tests pass. |
+| **Worktrees** | Each session runs in an **isolated VM** — parallel sessions cannot collide. For multi-branch work, create one session per branch. |
+| **Skills** | **Playbooks** (`Settings → Playbooks`): reusable prompt templates (custom system instructions), equivalent to `SKILL.md`. Attach to any session or schedule; author in the web app or extract from successful sessions. |
+| **Plugins & Connectors** | **Connectors** (`Settings → Integrations`): GitHub, GitLab, Slack, Teams, Jira, Linear. Enable GitHub/GitLab for PR writes; add read-only MCP servers for extra context. |
+| **Sub-agents** | **Managed Devins**: the primary session delegates sub-tasks to parallel Devin VMs. For maker/checker, run a separate **Devin Review** session over the diff — it reports `PASS/FAIL` without writing code. |
+| **State / Memory** | **Knowledge base** (`Settings → Knowledge`): org-wide context (style guides, patterns). Supplement with a committed `STATE.md` at the repo root that every session reads first and updates at the end. |
+| **PR-only writes** | Devin should open or update Pull Requests instead of committing directly to protected branches. All repository changes flow through PR review before merge — never push directly to `main`. |
+| **Honest gaps** | No native cron-expression UI; no CLI worktree command (VM isolation is implicit); PR merge always requires a human — Devin cannot auto-merge. |
+
+### Minimal Transfer Recipe
+
+```bash
+# 1. Create a Playbook from the loop-triage skill text
+#    Settings → Playbooks → New Playbook
+
+# 2. Seed project state
+cp starters/minimal-loop/STATE.md.example STATE.md
+
+# 3. Add project context to the Knowledge base
+#    Settings → Knowledge → New Entry (paste AGENTS.md + codebase conventions)
+
+# 4. Schedule a daily triage session
+#    Settings → Schedules → New Schedule  (see prompt below)
+```
+
+### Week-one Daily Triage (Report-Only, L1)
+
+```text
+Run loop-triage for this repository.
+
+1. Read STATE.md and the Knowledge base entries for this project.
+2. Scan open issues and PRs for High Priority and Watch List items.
+3. Update STATE.md with those sections only.
+4. Do NOT edit source code, open PRs, or commit any file other than STATE.md.
+5. Post a brief summary to the session chat for human review.
+```
+
+Graduate to L2 by adding PR creation to the Playbook — but always with a human gate:
+
+> **Human Gate (L2+):** Devin PRs must be reviewed and merged by a human.
+> Never enable auto-merge. Use Devin Review as the maker; a team member is the checker.
+> Paths on the [denylist](../docs/safety.md#path-denylist) (secrets, billing, auth) require
+> explicit human approval before any Devin session may touch them.

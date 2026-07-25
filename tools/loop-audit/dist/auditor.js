@@ -1,6 +1,7 @@
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
+import { fileExists, scanSkillDirectories } from '@cobusgreyling/readiness-core';
 const STATE_FILES = [
     'STATE.md',
     'pr-babysitter-state.md',
@@ -12,7 +13,7 @@ const STATE_FILES = [
 ];
 /** Score contribution for each readiness signal (see computeScore). */
 const SCORE_WEIGHTS = {
-    base: 10,
+    base: 7,
     stateFile: 18,
     triage: 14,
     loopConfig: 9,
@@ -34,9 +35,22 @@ const SCORE_WEIGHTS = {
     toolScope: 3,
     stallDetection: 3,
     escalation: 3,
+    gateYaml: 3,
     constraintsFile: 4,
     constraintsSkill: 2,
     loopActivity: 6,
+    /** Harness Runtime (harness-foundry) — stack, lock, sessions, emit, host */
+    harnessStack: 4,
+    harnessLock: 1,
+    harnessSessions: 2,
+    harnessEmit: 1,
+    harnessHost: 1,
+    /** Memory Engineering (memory-tiers.md, memory-budget.md) */
+    memoryTiers: 4,
+    memoryBudget: 2,
+    /** Fleet Engineering (fleet-registry.md, fleet-inbox.md) */
+    fleetRegistry: 4,
+    fleetInbox: 2,
 };
 const LEVEL_THRESHOLDS = {
     L1: 38,
@@ -91,34 +105,8 @@ const ESCALATION_HINTS = [
     /exit code 2/i,
     /\bexit 2\b/i,
 ];
-async function fileExists(p) {
-    try {
-        await stat(p);
-        return true;
-    }
-    catch {
-        return false;
-    }
-}
 async function findSkills(root) {
-    const dirs = [
-        path.join(root, '.grok', 'skills'),
-        path.join(root, '.claude', 'skills'),
-        path.join(root, '.codex', 'skills'),
-        path.join(root, 'skills'),
-    ];
-    const found = [];
-    for (const dir of dirs) {
-        if (!(await fileExists(dir)))
-            continue;
-        const entries = await readdir(dir, { withFileTypes: true });
-        for (const e of entries) {
-            if (e.isDirectory())
-                found.push(e.name);
-            if (e.isFile() && e.name === 'SKILL.md')
-                found.push('root-skill');
-        }
-    }
+    const found = await scanSkillDirectories(root);
     // Claude Code agents and Codex subagents can host the verifier role
     const agentDirs = [
         path.join(root, '.claude', 'agents'),
@@ -162,7 +150,7 @@ async function findSkills(root) {
 }
 async function detectLoopActivity(root) {
     const evidence = [];
-    const stateCandidates = [...STATE_FILES, 'STATE.md'];
+    const stateCandidates = [...STATE_FILES];
     // 1. Look for "Last run" timestamps or dated entries inside state files (strong real-usage signal)
     for (const sf of stateCandidates) {
         try {
@@ -272,12 +260,32 @@ export function computeScore(signals) {
         score += w.stallDetection;
     if (signals.governance.escalation)
         score += w.escalation;
+    if (signals.governance.gateYaml)
+        score += w.gateYaml;
     if (signals.constraints.present)
         score += w.constraintsFile;
     if (signals.constraints.hasConstraintsSkill)
         score += w.constraintsSkill;
     if (signals.loopActivity.present)
         score += w.loopActivity;
+    if (signals.harness.stack)
+        score += w.harnessStack;
+    if (signals.harness.lock)
+        score += w.harnessLock;
+    if (signals.harness.sessions)
+        score += w.harnessSessions;
+    if (signals.harness.emit)
+        score += w.harnessEmit;
+    if (signals.harness.host)
+        score += w.harnessHost;
+    if (signals.memory.tiers)
+        score += w.memoryTiers;
+    if (signals.memory.budget)
+        score += w.memoryBudget;
+    if (signals.fleet.registry)
+        score += w.fleetRegistry;
+    if (signals.fleet.inbox)
+        score += w.fleetInbox;
     score = Math.min(100, Math.max(0, score));
     const costReady = signals.cost.budgetDoc &&
         signals.cost.runLog &&
@@ -342,9 +350,6 @@ export async function auditProject(target) {
             safetyDocPresent = true;
             break;
         }
-    }
-    if (!safetyDocPresent) {
-        safetyDocPresent = await fileExists(path.join(root, 'docs', 'safety.md'));
     }
     const mcpPresent = (await Promise.all(MCP_FILES.map(f => fileExists(path.join(root, f))))).some(Boolean) ||
         /MCP|mcp server|plugins & connectors/i.test(loopMdContent);
@@ -457,6 +462,55 @@ export async function auditProject(target) {
         ledgerPresent ||
         STALL_HINTS.some((re) => re.test(governanceCorpus));
     const escalation = ESCALATION_HINTS.some((re) => re.test(governanceCorpus));
+    const gateYaml = await fileExists(path.join(root, 'gate.yaml'));
+    // Harness Runtime (harness-foundry) — versioned stack, sessions/traces, outerloop emit, host bridge
+    const foundryStackPath = path.join(root, '.foundry', 'stack.yaml');
+    const harnessStack = await fileExists(foundryStackPath);
+    const harnessLock = (await fileExists(path.join(root, '.foundry', 'stack.lock'))) ||
+        (await fileExists(path.join(root, '.foundry', 'stack.lock.yaml')));
+    let harnessSessions = false;
+    const sessionsDir = path.join(root, '.foundry', 'sessions');
+    if (await fileExists(sessionsDir)) {
+        try {
+            const entries = await readdir(sessionsDir, { withFileTypes: true });
+            harnessSessions = entries.some((e) => e.isDirectory() || (e.isFile() && e.name !== '.gitkeep'));
+        }
+        catch {
+            harnessSessions = false;
+        }
+    }
+    let harnessEmit = false;
+    if (harnessStack) {
+        try {
+            const stackTxt = await readFile(foundryStackPath, 'utf8');
+            if (/emit\/outerloop-evidence|outerloop/i.test(stackTxt))
+                harnessEmit = true;
+        }
+        catch { }
+    }
+    if (!harnessEmit && (await fileExists(path.join(root, '.foundry', 'hooks', 'outerloop.yaml')))) {
+        harnessEmit = true;
+    }
+    const harnessHost = (await fileExists(path.join(root, '.foundry', 'host', 'cursor'))) ||
+        (await fileExists(path.join(root, '.foundry', 'host', 'claude-code'))) ||
+        (await fileExists(path.join(root, '.cursor', 'rules', 'foundry.mdc'))) ||
+        (await fileExists(path.join(root, '.claude', 'foundry.md'))) ||
+        /foundry host integrate|harness-foundry/i.test(loopMdContent);
+    const harness = {
+        stack: harnessStack,
+        lock: harnessLock,
+        sessions: harnessSessions,
+        emit: harnessEmit,
+        host: harnessHost,
+    };
+    // Memory Engineering (memory-tiers.md, memory-budget.md)
+    const memoryTiers = await fileExists(path.join(root, 'memory-tiers.md'));
+    const memoryBudget = await fileExists(path.join(root, 'memory-budget.md'));
+    const memory = { tiers: memoryTiers, budget: memoryBudget };
+    // Fleet Engineering (fleet-registry.md, fleet-inbox.md)
+    const fleetRegistry = await fileExists(path.join(root, 'fleet-registry.md'));
+    const fleetInbox = await fileExists(path.join(root, 'fleet-inbox.md'));
+    const fleet = { registry: fleetRegistry, inbox: fleetInbox };
     const signals = {
         stateFile: { present: statePaths.length > 0, paths: statePaths },
         loopConfig: { present: loopMd, path: loopMd ? 'LOOP.md' : undefined },
@@ -473,8 +527,11 @@ export async function auditProject(target) {
         worktreeEvidence: { present: worktreeEvidence },
         registry: { present: registryPresent },
         cost: { budgetDoc, runLog, loopMdBudget, budgetSkill },
-        governance: { toolScope, stallDetection, escalation },
+        governance: { toolScope, stallDetection, escalation, gateYaml },
         loopActivity,
+        harness,
+        memory,
+        fleet,
     };
     if (!signals.stateFile.present) {
         findings.push({ level: 'fail', message: 'No state file (STATE.md or pattern-specific state).' });
@@ -582,6 +639,16 @@ export async function auditProject(target) {
     else {
         findings.push({ level: 'ok', message: 'Tool/MCP scope constrained (least-privilege signal present).' });
     }
+    if (!signals.governance.gateYaml) {
+        findings.push({
+            level: 'warn',
+            message: 'No gate.yaml — explicit human approval gates are not defined for loop-sync.',
+        });
+        recommendations.push('Add gate.yaml to define explicit human approval gates.');
+    }
+    else {
+        findings.push({ level: 'ok', message: 'gate.yaml present (human gates defined).' });
+    }
     if (!signals.governance.stallDetection) {
         findings.push({ level: 'warn', message: 'No stall / no-progress detection — a stuck loop can repeat the same failing action instead of escalating.' });
         recommendations.push('Add loop-context (circuit breaker) or a max-attempts / no-progress rule in LOOP.md that escalates instead of looping');
@@ -603,7 +670,86 @@ export async function auditProject(target) {
     else {
         findings.push({ level: 'ok', message: `Loop activity detected — real usage signals present (${signals.loopActivity.evidence.length} sources).` });
     }
+    if (!signals.harness.stack) {
+        findings.push({
+            level: 'warn',
+            message: 'No harness-foundry stack (.foundry/stack.yaml) — loop is designed but not versioned as a composable harness runtime.',
+        });
+        recommendations.push('Scaffold a harness: npx @cobusgreyling/loop-init . --with-foundry  (or npx @cobusgreyling/harness-foundry init --from loop-engineering:daily-triage)');
+    }
+    else {
+        findings.push({ level: 'ok', message: 'Harness stack present (.foundry/stack.yaml).' });
+        if (!signals.harness.emit) {
+            findings.push({
+                level: 'warn',
+                message: 'Harness stack has no outerloop emit path (emit/outerloop-evidence or .foundry/hooks/outerloop.yaml).',
+            });
+            recommendations.push('Add emit/outerloop-evidence to the reliability layer, or enable .foundry/hooks/outerloop.yaml');
+        }
+        else {
+            findings.push({ level: 'ok', message: 'Harness emit path to outerloop present.' });
+        }
+        if (!signals.harness.sessions) {
+            findings.push({
+                level: 'warn',
+                message: 'No harness sessions yet — run foundry once to produce traces.',
+            });
+            recommendations.push('npx @cobusgreyling/harness-foundry run --goal "Verify harness wiring" then re-audit');
+        }
+        else {
+            findings.push({ level: 'ok', message: 'Harness session/trace evidence present.' });
+        }
+    }
+    if (!signals.memory.tiers) {
+        findings.push({
+            level: 'warn',
+            message: 'No memory-tiers.md — memory engineering tiers are not defined.',
+        });
+        recommendations.push('Scaffold memory tiers: npx @cobusgreyling/loop-init . --with-memory');
+    }
+    else {
+        findings.push({ level: 'ok', message: 'Memory tiers defined (memory-tiers.md).' });
+        if (!signals.memory.budget) {
+            findings.push({
+                level: 'warn',
+                message: 'Memory tiers defined but no memory-budget.md — recall budget is missing.',
+            });
+            recommendations.push('Add memory-budget.md to cap retrieval costs.');
+        }
+        else {
+            findings.push({ level: 'ok', message: 'Memory budget defined.' });
+        }
+    }
+    if (!signals.fleet.registry) {
+        findings.push({
+            level: 'warn',
+            message: 'No fleet-registry.md — multi-agent populations and roles are not defined.',
+        });
+        recommendations.push('Scaffold a fleet: npx @cobusgreyling/loop-init . --with-fleet');
+    }
+    else {
+        findings.push({ level: 'ok', message: 'Fleet registry defined (fleet-registry.md).' });
+        if (!signals.fleet.inbox) {
+            findings.push({
+                level: 'warn',
+                message: 'Fleet registry defined but no fleet-inbox.md — agents cannot cross-communicate.',
+            });
+            recommendations.push('Add fleet-inbox.md to enable cross-loop tasks.');
+        }
+        else {
+            findings.push({ level: 'ok', message: 'Fleet inbox defined.' });
+        }
+    }
     const { score, level, assessment } = computeScore(signals);
+    if (score >= 80 && !signals.harness.stack) {
+        recommendations.unshift('Loop Ready 80+: version this loop as a harness — npx @cobusgreyling/loop-init . --with-foundry · showcase https://github.com/cobusgreyling/harness-foundry/blob/main/docs/showcase.md');
+    }
+    if (score >= 80 && !signals.memory.tiers) {
+        recommendations.unshift("Loop Ready 80+: version this loop's memory — npx @cobusgreyling/loop-init . --with-memory");
+    }
+    if (score >= 80 && !signals.fleet.registry) {
+        recommendations.unshift("Loop Ready 80+: version this loop for a fleet — npx @cobusgreyling/loop-init . --with-fleet");
+    }
     const costReady = signals.cost.budgetDoc &&
         signals.cost.runLog &&
         signals.cost.loopMdBudget;

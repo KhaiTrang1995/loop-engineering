@@ -105,6 +105,30 @@ test('breaker stagnation resets after a success', () => {
   assert.equal(d.escalate, false, 'trailing failure run is only 1 after the success');
 });
 
+// ── circuit breaker: frustration ───────────────────────────────────
+
+test('breaker trips on frustration (semantically similar actions but different errors)', () => {
+  const l = ledger([
+    attempt(1, 'failure', { action: 'Try to fix the syntax error', error: 'e1' }),
+    attempt(2, 'failure', { action: 'I will try to fix the syntax error', error: 'e2' }),
+    attempt(3, 'failure', { action: 'Trying to fix the syntax error', error: 'e3' }),
+  ]);
+  const d = checkCircuitBreaker(l, { ...DEFAULT_BREAKER, similarityThreshold: 0.5 });
+  assert.equal(d.escalate, true);
+  assert.equal(d.trigger, 'frustration');
+  assert.equal(d.shouldContinue, false);
+});
+
+test('breaker does not trip on frustration if actions differ', () => {
+  const l = ledger([
+    attempt(1, 'failure', { action: 'Install missing dependencies', error: 'e1' }),
+    attempt(2, 'failure', { action: 'Fix the failing test case', error: 'e2' }),
+    attempt(3, 'failure', { action: 'Revert the previous change', error: 'e3' }),
+  ]);
+  const d = checkCircuitBreaker(l);
+  assert.equal(d.escalate, false);
+});
+
 // ── circuit breaker: no-progress ───────────────────────────────────
 
 test('breaker trips on no-progress (consecutive failures, distinct errors)', () => {

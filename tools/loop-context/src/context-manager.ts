@@ -49,6 +49,8 @@ export interface CircuitBreakerConfig {
   maxIterations: number;
   /** Escalate when the same error signature repeats this many times in a row. */
   stagnationThreshold: number;
+  /** Escalate when the agent attempts semantically similar actions this many times in a row. */
+  frustrationThreshold: number;
   /** Escalate after this many consecutive failures with no success in between. */
   noProgressThreshold: number;
   /** Optional hard cap on cumulative tokens across the run. */
@@ -69,6 +71,7 @@ export interface PruneConfig {
 export const DEFAULT_BREAKER: CircuitBreakerConfig = {
   maxIterations: 10,
   stagnationThreshold: 3,
+  frustrationThreshold: 3,
   noProgressThreshold: 5,
   similarityThreshold: 0.85,
 };
@@ -135,6 +138,7 @@ export function calculateSimilarity(a: string, b: string): number {
 export type BreakerTrigger =
   | 'ok'
   | 'stagnation'
+  | 'frustration'
   | 'no-progress'
   | 'token-budget'
   | 'daily-budget'
@@ -199,6 +203,25 @@ export function checkCircuitBreaker(
         escalate: true,
         trigger: 'stagnation',
         reason: `Same error repeated ${same}× in a row (threshold ${config.stagnationThreshold}): "${lastSig}". Escalating instead of retrying.`,
+      };
+    }
+  }
+
+  // Frustration: semantically similar actions repeated without success.
+  if (failRun.length >= config.frustrationThreshold) {
+    const lastAction = failRun[failRun.length - 1].action;
+    let sameAction = 0;
+    for (let i = failRun.length - 1; i >= 0; i--) {
+      if (calculateSimilarity(failRun[i].action, lastAction) >= config.similarityThreshold) sameAction++;
+      else break;
+    }
+    if (sameAction >= config.frustrationThreshold) {
+      return {
+        ...base,
+        shouldContinue: false,
+        escalate: true,
+        trigger: 'frustration',
+        reason: `Semantic looping detected: agent repeated highly similar action ${sameAction}× in a row (threshold ${config.frustrationThreshold}): "${lastAction}". Escalating.`,
       };
     }
   }

@@ -19,6 +19,7 @@ import {
   loadSafetyDoc,
   listPatternDocs,
   loadPatternDoc,
+  loadGatePolicy,
 } from '../dist/resolver.js';
 
 let tmpRoot;
@@ -96,6 +97,19 @@ async function setup() {
   await writeFile(
     path.join(tmpRoot, 'docs', 'safety.md'),
     '# Safety\n\n## Path Denylists\n- .env\n- credentials\n',
+  );
+
+  // gate.yaml
+  await writeFile(
+    path.join(tmpRoot, 'gate.yaml'),
+    `version: 1
+denylist:
+  - ".env"
+  - "**/secrets/**"
+maxFiles: 10
+autoMergeAllowlist:
+  - "docs/**"
+`,
   );
 
   return tmpRoot;
@@ -296,6 +310,18 @@ test('loadSafetyDoc reads docs/safety.md', async () => {
   }
 });
 
+test('loadGatePolicy reads gate.yaml', async () => {
+  const root = await setup();
+  try {
+    const gate = await loadGatePolicy(root);
+    assert.ok(gate);
+    assert.ok(gate.includes('version: 1'));
+    assert.ok(gate.includes('.env'));
+  } finally {
+    await cleanup();
+  }
+});
+
 test('listPatternDocs finds .md files in patterns/', async () => {
   const root = await setup();
   try {
@@ -357,7 +383,7 @@ test('server lists all tools over stdio', async () => {
   try {
     const res = await callServer(root, [{ id: 1, method: 'tools/list', params: {} }]);
     const names = res.get(1).result.tools.map(t => t.name);
-    assert.equal(names.length, 8);
+    assert.equal(names.length, 11);
     assert.ok(names.includes('loop_list_patterns'));
     assert.ok(names.includes('loop_estimate_cost'));
   } finally {
@@ -404,6 +430,36 @@ test('pattern resource is readable over stdio', async () => {
     }]);
     const text = res.get(1).result.contents[0].text;
     assert.ok(text.includes('# Daily Triage'));
+  } finally {
+    await cleanup();
+  }
+});
+
+test('gate resource is readable over stdio', async () => {
+  const root = await setup();
+  try {
+    const res = await callServer(root, [{
+      id: 1, method: 'resources/read',
+      params: { uri: 'loop://gate' },
+    }]);
+    const text = res.get(1).result.contents[0].text;
+    assert.ok(text.includes('version: 1'));
+    assert.ok(text.includes('denylist:'));
+  } finally {
+    await cleanup();
+  }
+});
+
+test('loop_gate_check tool returns policy decision', async () => {
+  const root = await setup();
+  try {
+    const res = await callServer(root, [{
+      id: 1, method: 'tools/call',
+      params: { name: 'loop_gate_check', arguments: { action: 'commit', paths: ['.env', 'src/main.ts'] } },
+    }]);
+    const text = res.get(1).result.content[0].text;
+    assert.ok(text.includes('BLOCKED'));
+    assert.ok(text.includes('denylist'));
   } finally {
     await cleanup();
   }

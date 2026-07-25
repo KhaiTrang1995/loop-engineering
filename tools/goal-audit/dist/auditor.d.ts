@@ -1,3 +1,4 @@
+import { Finding, BaseAuditResult } from '@cobusgreyling/readiness-core';
 export interface GoalSignals {
     goalFile: {
         present: boolean;
@@ -37,18 +38,8 @@ export interface GoalSignals {
         present: boolean;
     };
 }
-export interface Finding {
-    level: 'ok' | 'warn' | 'fail';
-    message: string;
-}
-export interface AuditResult {
-    target: string;
-    score: number;
-    level: 'G0' | 'G1' | 'G2' | 'G3';
-    assessment: string;
-    signals: GoalSignals;
-    findings: Finding[];
-    recommendations: string[];
+export type { Finding };
+export interface AuditResult extends BaseAuditResult<'G0' | 'G1' | 'G2' | 'G3', GoalSignals> {
 }
 export declare function auditProject(target: string): Promise<AuditResult>;
 //# sourceMappingURL=auditor.d.ts.map

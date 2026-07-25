@@ -15,7 +15,7 @@
       "name": "implementer",
       "description": "L2 implementer for creating changelog PRs.",
       "mode": "subagent",
-      "prompt": "Commit the approved release notes to a new branch and open a draft PR. Flag breaking changes and security items explicitly in the PR body. Do not merge.",
+      "prompt": "Run npx @cobusgreyling/loop-gate check --action commit --paths <changed_files> before committing. Commit the approved release notes to a new branch and open a draft PR. Flag breaking changes and security items explicitly in the PR body. Do not merge.",
       "permission": {
         "bash": "ask",
         "edit": "ask"

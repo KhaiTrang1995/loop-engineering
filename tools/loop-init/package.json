@@ -1,7 +1,7 @@
 {
   "name": "@cobusgreyling/loop-init",
-  "version": "1.4.0",
-  "description": "Scaffold loop engineering patterns and starters into any project. Supports Grok, Claude Code, Codex, Opencode and more. npx @cobusgreyling/loop-init . --pattern daily-triage --tool opencode",
+  "version": "1.5.0",
+  "description": "Scaffold loop engineering patterns and starters into any project. Optional --with-foundry harness stack. Supports Grok, Claude Code, Codex, Opencode and more. npx @cobusgreyling/loop-init . --pattern daily-triage --tool opencode --with-foundry",
   "type": "module",
   "bin": {
     "loop-init": "./dist/cli.js"
@@ -50,7 +50,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@cobusgreyling/loop-audit": "^1.5.0"
+    "@cobusgreyling/loop-audit": "^1.7.0"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",

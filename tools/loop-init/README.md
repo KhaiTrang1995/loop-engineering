@@ -13,11 +13,30 @@ npx @cobusgreyling/loop-init . --pattern daily-triage --tool grok
 npx @cobusgreyling/loop-init . --pattern daily-triage --tool opencode
 npx @cobusgreyling/loop-init . -p pr-babysitter -t claude
 npx @cobusgreyling/loop-init . -p dependency-sweeper --dry-run
+# One-command LE → harness-foundry funnel:
+npx @cobusgreyling/loop-init . --pattern daily-triage --tool grok --with-foundry
 ```
 
 See [docs/RELEASE.md](../../docs/RELEASE.md) for npm publish tags. The published package bundles `starters/` and `templates/` from this monorepo.
 
 After scaffolding, always run `npx @cobusgreyling/loop-audit . --suggest` and actually execute the first report-only loop to generate activity signals.
+
+## `--with-foundry` (harness runtime)
+
+Scaffolds a [harness-foundry](https://github.com/cobusgreyling/harness-foundry) stack beside your loop files:
+
+| LE pattern | Foundry preset |
+|------------|----------------|
+| `daily-triage`, `issue-triage`, `changelog-drafter` | `minimal` |
+| `pr-babysitter`, `ci-sweeper`, `dependency-sweeper`, `post-merge-cleanup` | `implementer` |
+
+Creates `.foundry/stack.yaml`, outerloop hook stub, and a short README. Equivalent alias on the Foundry CLI:
+
+```bash
+npx @cobusgreyling/harness-foundry init --from loop-engineering:daily-triage
+```
+
+Every `loop-init` run prints a Foundry CTA; when Loop Ready is **≥ 80**, the CTA is emphasized as the next step after design.
 
 ## Patterns
 

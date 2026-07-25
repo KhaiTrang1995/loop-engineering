@@ -28,12 +28,22 @@ jobs:
       - name: Install, build, test
         working-directory: tools/goal-audit
         run: |
+          # Build monorepo sibling first
+          (cd ../readiness-core && npm ci && npm run build)
           npm ci
           npm run build
           npm test
 
       - name: Publish to npm
         working-directory: tools/goal-audit
-        run: npm publish --access public --provenance
+        run: |
+          # Rewrite to registry version for publish
+          node -e "
+            const fs = require('fs');
+            const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            p.dependencies['@cobusgreyling/readiness-core'] = '^1.0.0';
+            fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+          "
+          npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -78,22 +78,271 @@ const PATTERN_BUDGET: Record<
   'issue-triage': { name: 'Issue Triage', maxRunsPerDay: 12, dailyCap: 80_000, maxSpawnsL1: 0, maxSpawnsL2: 1 },
 };
 
+type FoundryPreset = 'minimal' | 'implementer';
+
+/** Map LE patterns → harness-foundry stack presets (report-only → minimal, fix → implementer). */
+const PATTERN_FOUNDRY_PRESET: Record<Pattern, FoundryPreset> = {
+  'daily-triage': 'minimal',
+  'issue-triage': 'minimal',
+  'changelog-drafter': 'minimal',
+  'pr-babysitter': 'implementer',
+  'ci-sweeper': 'implementer',
+  'dependency-sweeper': 'implementer',
+  'post-merge-cleanup': 'implementer',
+};
+
+const FOUNDRY_SHOWCASE =
+  'https://github.com/cobusgreyling/harness-foundry/blob/main/docs/showcase.md';
+
 function parseArgs(argv: string[]) {
   let pattern: Pattern = 'daily-triage';
   let tool: Tool = 'grok';
   let target = '.';
   let dryRun = false;
+  let withFoundry = false;
+  let withMemory = false;
+  let withFleet = false;
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--pattern' || a === '-p') pattern = argv[++i] as Pattern;
     else if (a === '--tool' || a === '-t') tool = argv[++i] as Tool;
     else if (a === '--dry-run') dryRun = true;
-    else if (a === '--help' || a === '-h') return { help: true as const, pattern, tool, target, dryRun };
+    else if (a === '--with-foundry') withFoundry = true;
+    else if (a === '--with-memory') withMemory = true;
+    else if (a === '--with-fleet') withFleet = true;
+    else if (a === '--help' || a === '-h')
+      return { help: true as const, pattern, tool, target, dryRun, withFoundry, withMemory, withFleet };
     else if (!a.startsWith('-')) target = a;
   }
 
-  return { help: false as const, pattern, tool, target, dryRun };
+  return { help: false as const, pattern, tool, target, dryRun, withFoundry, withMemory, withFleet };
+}
+
+function foundryStackYaml(stackName: string, pattern: Pattern, preset: FoundryPreset): string {
+  if (preset === 'implementer') {
+    return `name: ${stackName}
+version: 1.0.0
+description: "loop-engineering ${pattern} → implementer harness (loop-init --with-foundry)"
+layers:
+  interface:
+    - primitive: model/anthropic
+      config:
+        model: claude-sonnet-4-20250514
+  composition:
+    - primitive: context/state-file
+    - primitive: tools/git-worktree-write
+  execution:
+    - primitive: sandbox/worktree-isolated
+    - primitive: control/token-budget-100k
+  reliability:
+    - primitive: observability/span-per-turn
+    - primitive: recovery/revert-on-test-fail
+    - primitive: emit/outerloop-evidence
+`;
+  }
+
+  return `name: ${stackName}
+version: 1.0.0
+description: "loop-engineering ${pattern} → minimal harness (loop-init --with-foundry)"
+layers:
+  interface:
+    - primitive: model/mock
+  composition:
+    - primitive: context/state-file
+  execution:
+    - primitive: control/token-budget-100k
+    - primitive: sandbox/worktree-isolated
+  reliability:
+    - primitive: observability/span-per-turn
+    - primitive: emit/outerloop-evidence
+`;
+}
+
+/**
+ * Scaffold a harness-foundry stack next to loop files so LE graduates land in
+ * a versioned harness in one command (no foundry package dependency).
+ */
+async function scaffoldFoundry(
+  pattern: Pattern,
+  targetDir: string,
+  dryRun: boolean,
+): Promise<{ preset: FoundryPreset; stackFile: string } | null> {
+  const preset = PATTERN_FOUNDRY_PRESET[pattern];
+  const foundryRoot = path.join(targetDir, '.foundry');
+  const stackFile = path.join(foundryRoot, 'stack.yaml');
+  const stackName = path.basename(targetDir) || 'project';
+
+  if (await exists(stackFile)) {
+    console.log(`  skip: ${stackFile} already exists`);
+    return { preset, stackFile };
+  }
+
+  const files: Array<{ path: string; content: string }> = [
+    { path: stackFile, content: foundryStackYaml(stackName, pattern, preset) },
+    {
+      path: path.join(foundryRoot, 'hooks', 'outerloop.yaml'),
+      content: `enabled: false
+adapter: outerloop
+emitOn:
+  - session.end
+`,
+    },
+    {
+      path: path.join(foundryRoot, 'README.md'),
+      content: `# Harness stack (from loop-engineering)
+
+Scaffolded by \`loop-init --with-foundry\` for pattern **${pattern}** (preset: **${preset}**).
+
+\`\`\`
+loop-engineering  →  harness-foundry  →  outerloop
+   (patterns)         (runtime)          (governance)
+\`\`\`
+
+## Next
+
+\`\`\`bash
+npx @cobusgreyling/harness-foundry validate
+npx @cobusgreyling/harness-foundry run --goal "Verify harness wiring"
+npx @cobusgreyling/harness-foundry evolve report --session <id>
+\`\`\`
+
+Showcase: ${FOUNDRY_SHOWCASE}
+`,
+    },
+    {
+      path: path.join(foundryRoot, 'sessions', '.gitkeep'),
+      content: '',
+    },
+  ];
+
+  for (const f of files) {
+    if (dryRun) {
+      console.log(`  would write: ${f.path}`);
+      continue;
+    }
+    await mkdir(path.dirname(f.path), { recursive: true });
+    await writeFile(f.path, f.content);
+    console.log(`  created: ${path.relative(targetDir, f.path)}`);
+  }
+
+  return { preset, stackFile };
+}
+
+async function scaffoldFleet(
+  targetDir: string,
+  templatesRoot: string,
+  dryRun: boolean,
+) {
+  const registryTemplate = path.join(templatesRoot, 'fleet-registry.md');
+  if (await exists(registryTemplate)) {
+    await copyFile(registryTemplate, path.join(targetDir, 'fleet-registry.md'), dryRun);
+  }
+  const inboxTemplate = path.join(templatesRoot, 'fleet-inbox.md');
+  if (await exists(inboxTemplate)) {
+    await copyFile(inboxTemplate, path.join(targetDir, 'fleet-inbox.md'), dryRun);
+  }
+}
+
+async function scaffoldMemory(
+  targetDir: string,
+  templatesRoot: string,
+  dryRun: boolean,
+) {
+  const tiersTemplate = path.join(templatesRoot, 'memory-tiers.md');
+  const tiersDest = path.join(targetDir, 'memory-tiers.md');
+  if (!(await exists(tiersDest))) {
+    await copyFile(tiersTemplate, tiersDest, dryRun);
+  }
+
+  const budgetTemplate = path.join(templatesRoot, 'memory-budget.md');
+  const budgetDest = path.join(targetDir, 'memory-budget.md');
+  if (!(await exists(budgetDest))) {
+    await copyFile(budgetTemplate, budgetDest, dryRun);
+  }
+}
+
+function printFoundryCta(opts: {
+  pattern: Pattern;
+  tool: Tool;
+  withFoundry: boolean;
+  score: number | null;
+  preset?: FoundryPreset;
+}) {
+  const { pattern, tool, withFoundry, score, preset } = opts;
+  const mapped = preset ?? PATTERN_FOUNDRY_PRESET[pattern];
+  console.log('');
+  if (withFoundry) {
+    console.log(`Harness stack ready (.foundry/, preset: ${mapped} for ${pattern})`);
+    console.log('  npx @cobusgreyling/harness-foundry validate');
+    console.log('  npx @cobusgreyling/harness-foundry run --goal "Verify harness wiring"');
+    console.log(`  Showcase: ${FOUNDRY_SHOWCASE}`);
+    return;
+  }
+
+  const highReady = score !== null && score >= 80;
+  console.log(
+    highReady
+      ? 'Next after Loop Ready 80+: version this loop as a harness'
+      : 'Optional: make this loop a versioned harness (harness-foundry)',
+  );
+  console.log(
+    `  npx @cobusgreyling/loop-init . --pattern ${pattern} --tool ${tool} --with-foundry`,
+  );
+  console.log(
+    `  # or: npx @cobusgreyling/harness-foundry init --from loop-engineering:${pattern}`,
+  );
+  if (highReady) {
+    console.log(`  Showcase: ${FOUNDRY_SHOWCASE}`);
+  }
+}
+
+function printFleetCta(opts: {
+  pattern: Pattern;
+  tool: Tool;
+  withFleet: boolean;
+  score: number | null;
+}) {
+  const { pattern, tool, withFleet, score } = opts;
+  console.log('');
+  if (withFleet) {
+    console.log('Fleet engineering stack ready (fleet-registry.md, fleet-inbox.md)');
+    return;
+  }
+
+  const highReady = score !== null && score >= 80;
+  console.log(
+    highReady
+      ? 'Next after Loop Ready 80+: version this loop for a fleet (fleet-engineering)'
+      : 'Optional: add fleet-engineering for multi-agent populations',
+  );
+  console.log(
+    `  npx @cobusgreyling/loop-init . --pattern ${pattern} --tool ${tool} --with-fleet`,
+  );
+}
+
+function printMemoryCta(opts: {
+  pattern: Pattern;
+  tool: Tool;
+  withMemory: boolean;
+  score: number | null;
+}) {
+  const { pattern, tool, withMemory, score } = opts;
+  console.log('');
+  if (withMemory) {
+    console.log('Memory engineering stack ready (memory-tiers.md, memory-budget.md)');
+    return;
+  }
+
+  const highReady = score !== null && score >= 80;
+  console.log(
+    highReady
+      ? "Next after Loop Ready 80+: version this loop's memory (memory-engineering)"
+      : 'Optional: add memory-engineering for cross-session knowledge',
+  );
+  console.log(
+    `  npx @cobusgreyling/loop-init . --pattern ${pattern} --tool ${tool} --with-memory`,
+  );
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -469,7 +718,7 @@ async function main() {
     console.log(`loop-init — scaffold loop engineering starters
 
 Usage:
-  loop-init [target-dir] --pattern <name> --tool <grok|claude|codex|opencode>
+  loop-init [target-dir] --pattern <name> --tool <grok|claude|codex|opencode> [--with-foundry]
 
 Patterns:
   daily-triage (default)
@@ -481,20 +730,30 @@ Patterns:
   issue-triage (new low-risk issue queue health companion to daily triage)
 
 Options:
-  -p, --pattern   Pattern to scaffold
-  -t, --tool      Tool target (default: grok)
-  --dry-run       Print actions without copying
-  -h, --help      This help
+  -p, --pattern     Pattern to scaffold
+  -t, --tool        Tool target (default: grok)
+  --with-foundry    Also scaffold .foundry/ stack (harness-foundry runtime)
+  --with-memory     Also scaffold memory-engineering tiers and budget
+  --with-fleet      Also scaffold fleet-engineering registry and inbox
+  --dry-run         Print actions without copying
+  -h, --help        This help
+
+Foundry presets (with --with-foundry):
+  report-only patterns → minimal
+  fix-capable patterns → implementer
 
 Examples:
   npx @cobusgreyling/loop-init . --pattern daily-triage --tool grok
-  npx @cobusgreyling/loop-init . -p pr-babysitter -t claude
+  npx @cobusgreyling/loop-init . --pattern daily-triage --tool grok --with-foundry
+  npx @cobusgreyling/loop-init . -p pr-babysitter -t claude --with-foundry
   npx @cobusgreyling/loop-init . -p daily-triage -t opencode
+  npx @cobusgreyling/loop-init . --with-memory
+  npx @cobusgreyling/loop-init . --with-fleet
 `);
     process.exit(0);
   }
 
-  const { pattern, tool, target, dryRun } = args;
+  const { pattern, tool, target, dryRun, withFoundry, withMemory, withFleet } = args;
 
   const validPatterns = Object.keys(PATTERN_STARTERS) as Pattern[];
   const validTools = Object.keys(TOOL_SUFFIX) as Tool[];
@@ -627,11 +886,33 @@ npm run lint
     console.log('  created: AGENTS.md (template)');
   }
 
+  let foundryPreset: FoundryPreset | undefined;
+  if (withFoundry) {
+    console.log('');
+    console.log('Harness foundry:');
+    const foundry = await scaffoldFoundry(pattern, targetDir, dryRun);
+    foundryPreset = foundry?.preset;
+  }
+
+  if (withMemory) {
+    console.log('');
+    console.log('Memory engineering:');
+    await scaffoldMemory(targetDir, templatesRoot, dryRun);
+  }
+
+  if (withFleet) {
+    console.log('');
+    console.log('Fleet engineering:');
+    await scaffoldFleet(targetDir, templatesRoot, dryRun);
+  }
+
   const auditArg = auditTargetArg(target, targetDir);
+  let auditScore: number | null = null;
 
   if (!dryRun) {
     const audit = await runAuditSummary(targetDir);
     if (audit) {
+      auditScore = audit.score;
       console.log('');
       console.log(`✓ Loop Ready: ${audit.score}/100 (${audit.level})`);
       console.log(`  ${formatScoreBar(audit.score)}`);
@@ -661,6 +942,25 @@ npm run lint
   console.log(`  ${firstLoopCommand(pattern, tool)}`);
   console.log('');
   console.log(`Estimate cost: npx @cobusgreyling/loop-cost --pattern ${pattern} --level L1`);
+  printFoundryCta({
+    pattern,
+    tool,
+    withFoundry,
+    score: auditScore,
+    preset: foundryPreset,
+  });
+  printMemoryCta({
+    pattern,
+    tool,
+    withMemory,
+    score: auditScore,
+  });
+  printFleetCta({
+    pattern,
+    tool,
+    withFleet,
+    score: auditScore,
+  });
   printContributorCta();
 }
 

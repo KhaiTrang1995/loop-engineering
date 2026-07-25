@@ -44,4 +44,5 @@ export declare function loadLoopConfig(root: string): Promise<string | null>;
 export declare function loadBudget(root: string): Promise<string | null>;
 export declare function loadRunLog(root: string): Promise<string | null>;
 export declare function loadSafetyDoc(root: string): Promise<string | null>;
+export declare function loadGatePolicy(root: string): Promise<string | null>;
 export declare function listPatternDocs(root: string): Promise<string[]>;

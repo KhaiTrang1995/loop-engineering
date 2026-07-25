@@ -6,6 +6,8 @@
   "bin": {
     "loop-worktree": "dist/cli.js"
   },
+  "main": "dist/worktree.js",
+  "types": "dist/worktree.d.ts",
   "files": [
     "dist",
     "README.md"

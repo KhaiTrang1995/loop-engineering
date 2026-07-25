@@ -22,7 +22,7 @@ Start (L2 assisted, patch-only):
 
 ```bash
 opencode run \
-  "Run skills/dependency-triage/SKILL.md. Scan package manifests for outdated and vulnerable deps. Patch-only auto-fix in worktree with verifier. Escalate majors, high-sev CVEs, and denylist packages. Update state." \
+  "Run skills/dependency-triage/SKILL.md. Scan package manifests for outdated and vulnerable deps. Patch-only auto-fix in worktree with verifier. Run loop-gate check before commit. Escalate majors, high-sev CVEs, and denylist packages. Update state." \
   --title "Dependency sweeper"
 ```
 

@@ -134,6 +134,9 @@ export async function loadSafetyDoc(root) {
     }
     return null;
 }
+export async function loadGatePolicy(root) {
+    return readFileIfExists(path.join(root, 'gate.yaml'));
+}
 export async function listPatternDocs(root) {
     const patternsDir = path.join(root, 'patterns');
     if (!(await fileExists(patternsDir)))

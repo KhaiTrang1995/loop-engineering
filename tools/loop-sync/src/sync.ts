@@ -207,6 +207,9 @@ export async function runSync(options: SyncOptions): Promise<DriftReport> {
     'STATE.md',
     'LOOP.md',
     'AGENTS.md',
+    'gate.yaml',
+    'loop-budget.md',
+    'loop-run-log.md',
   ];
   
   // Check for missing required files

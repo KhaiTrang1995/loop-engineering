@@ -19,7 +19,7 @@ Scaffold for the [CI Sweeper](../../patterns/ci-sweeper.md) loop.
 
 3. Start (Grok):
    ```bash
-   /loop 15m Check CI on main. Update ci-sweeper-state.md. Classify failures. For new actionable failures (not flakes): worktree + minimal-fix + loop-verifier. Escalate after 3 attempts.
+   /loop 15m Check CI on main. Update ci-sweeper-state.md. Classify failures. For new actionable failures (not flakes): worktree + minimal-fix + loop-verifier. Run loop-gate check before commit. Escalate after 3 attempts.
    ```
 
 ## Flake Policy

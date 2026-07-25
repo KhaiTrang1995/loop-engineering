@@ -22,7 +22,7 @@ Start (L2 cautious — CI sweeper is action-oriented from week one):
 
 ```bash
 opencode run \
-  "Run skills/ci-triage/SKILL.md. Classify each failing check. For clear single-file regressions, create a worktree and apply a minimal fix with verifier. Update ci-sweeper-state.md. Infra and security failures: escalate." \
+  "Run skills/ci-triage/SKILL.md. Classify each failing check. For clear single-file regressions, create a worktree and apply a minimal fix with verifier. Run loop-gate check before commit. Update ci-sweeper-state.md. Infra and security failures: escalate." \
   --title "CI sweeper"
 ```
 

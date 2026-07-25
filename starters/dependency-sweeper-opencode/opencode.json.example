@@ -15,7 +15,7 @@
       "name": "implementer",
       "description": "L2 implementer for patch-only dependency upgrades in a worktree.",
       "mode": "subagent",
-      "prompt": "Apply the identified patch-only upgrade inside the supplied worktree. Run npm ci && npm test. Never touch denylisted packages. Output the diff.",
+      "prompt": "Apply the identified patch-only upgrade inside the supplied worktree. Run npm ci && npm test. Run npx @cobusgreyling/loop-gate check --action commit --paths <changed_files> before committing. Never touch denylisted packages. Output the diff.",
       "permission": {
         "bash": "ask",
         "edit": "ask"

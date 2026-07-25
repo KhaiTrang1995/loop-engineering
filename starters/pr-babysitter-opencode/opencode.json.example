@@ -15,7 +15,7 @@
       "name": "implementer",
       "description": "L2 implementer for minimal PR fixes inside an isolated worktree.",
       "mode": "subagent",
-      "prompt": "Implement only the requested minimal fix inside the supplied worktree. Respect AGENTS.md and LOOP.md. Run documented tests. Never force-push. Draft PR by default.",
+      "prompt": "Implement only the requested minimal fix inside the supplied worktree. Respect AGENTS.md and LOOP.md. Run documented tests. Run npx @cobusgreyling/loop-gate check --action commit --paths <changed_files> before committing. Never force-push. Draft PR by default.",
       "permission": {
         "bash": "ask",
         "edit": "ask"

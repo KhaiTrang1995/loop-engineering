@@ -15,7 +15,7 @@
       "name": "implementer",
       "description": "L2 implementer for small cleanup fixes inside an isolated worktree.",
       "mode": "subagent",
-      "prompt": "Implement only the requested single-file cleanup inside the supplied worktree. Run tests. Never touch denylist paths. Output the diff.",
+      "prompt": "Implement only the requested single-file cleanup inside the supplied worktree. Run tests. Run npx @cobusgreyling/loop-gate check --action commit --paths <changed_files> before committing. Never touch denylist paths. Output the diff.",
       "permission": {
         "bash": "ask",
         "edit": "ask"

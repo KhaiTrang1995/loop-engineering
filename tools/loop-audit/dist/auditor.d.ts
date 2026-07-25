@@ -1,3 +1,4 @@
+import { Finding, BaseAuditResult } from '@cobusgreyling/readiness-core';
 export interface LoopSignals {
     stateFile: {
         present: boolean;
@@ -53,6 +54,7 @@ export interface LoopSignals {
         toolScope: boolean;
         stallDetection: boolean;
         escalation: boolean;
+        gateYaml: boolean;
     };
     constraints: {
         present: boolean;
@@ -62,19 +64,27 @@ export interface LoopSignals {
         present: boolean;
         evidence: string[];
     };
+    /** harness-foundry runtime signals (LE → Foundry funnel). */
+    harness: {
+        stack: boolean;
+        lock: boolean;
+        sessions: boolean;
+        emit: boolean;
+        host: boolean;
+    };
+    /** memory-engineering setup (memory-tiers.md, memory-budget.md) */
+    memory: {
+        tiers: boolean;
+        budget: boolean;
+    };
+    /** fleet-engineering setup (fleet-registry.md, fleet-inbox.md) */
+    fleet: {
+        registry: boolean;
+        inbox: boolean;
+    };
 }
-export interface Finding {
-    level: 'ok' | 'warn' | 'fail';
-    message: string;
-}
-export interface AuditResult {
-    target: string;
-    score: number;
-    level: 'L0' | 'L1' | 'L2' | 'L3';
-    assessment: string;
-    signals: LoopSignals;
-    findings: Finding[];
-    recommendations: string[];
+export type { Finding };
+export interface AuditResult extends BaseAuditResult<'L0' | 'L1' | 'L2' | 'L3', LoopSignals> {
 }
 export declare function computeScore(signals: LoopSignals): {
     score: number;

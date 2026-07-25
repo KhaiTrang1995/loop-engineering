@@ -2,6 +2,14 @@
 
 All notable changes to `@cobusgreyling/loop-audit` are documented here.
 
+## [1.7.0] - 2026-07-20
+
+### Added
+- **Harness Runtime** scoring signals for the LE → harness-foundry funnel:
+  - `.foundry/stack.yaml`, `stack.lock`, sessions/traces, outerloop emit path, host integrate hints
+- Loop Ready **80+** recommendation / human report CTA → `loop-init --with-foundry`
+- `--suggest` copy commands for Foundry scaffold + first `foundry run`
+
 ## [1.6.0] - 2026-07-09
 
 ### Added

@@ -173,6 +173,10 @@ export async function loadSafetyDoc(root: string): Promise<string | null> {
   return null;
 }
 
+export async function loadGatePolicy(root: string): Promise<string | null> {
+  return readFileIfExists(path.join(root, 'gate.yaml'));
+}
+
 export async function listPatternDocs(root: string): Promise<string[]> {
   const patternsDir = path.join(root, 'patterns');
   if (!(await fileExists(patternsDir))) return [];

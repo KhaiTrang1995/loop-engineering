@@ -128,7 +128,7 @@ describe('cli', () => {
       ({ stdout } = await exec('node', [CLI, testDir, '--json']));
     } catch (err) {
       stdout = err.stdout;
-      assert.equal(err.code, 2);
+      assert.equal(err.code, 1);
     }
     const report = JSON.parse(stdout);
 
