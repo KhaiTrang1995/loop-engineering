@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node --test test/auditor.test.mjs",
+    "test": "npm run build && node --test test/*.test.mjs",
     "prepublishOnly": "npm test",
     "start": "node dist/cli.js",
     "audit": "npm run build && node dist/cli.js",

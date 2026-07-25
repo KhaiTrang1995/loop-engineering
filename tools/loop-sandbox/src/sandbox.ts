@@ -104,15 +104,42 @@ export async function runInSandbox(root: string, command: string, args: string[]
   try {
     // 3. Execute the user's command
     try {
-      const child = spawn(command, args, {
-        cwd: worktreeAbsPath,
-        stdio: 'inherit',
-        shell: options.shell ?? false
-      });
-
       exitCode = await new Promise<number | null>((resolve) => {
-        child.on('close', (code) => resolve(code));
-        child.on('error', () => resolve(1));
+        // On Windows, a failed spawn (ENOENT) still emits a 'close' event a
+        // few ms after 'error' with a synthetic exit code. Once the ENOENT
+        // retry below fires, this flag makes the first (non-shell) attempt's
+        // now-stale 'close'/'error' events no-ops instead of letting them win
+        // the resolve() race against the retry's real, later result.
+        let supersededByRetry = false;
+
+        const attempt = (useShell: boolean) => {
+          const child = spawn(command, args, {
+            cwd: worktreeAbsPath,
+            stdio: 'inherit',
+            shell: useShell
+          });
+
+          child.on('close', (code) => {
+            if (!useShell && supersededByRetry) return;
+            resolve(code);
+          });
+          child.on('error', (err: NodeJS.ErrnoException) => {
+            if (!useShell && supersededByRetry) return;
+            // On Windows, npm-installed CLIs (npx, tsc, ...) are .cmd/.bat
+            // shims that spawn can't exec directly, and fail with ENOENT --
+            // retry once through a shell. Forcing shell: true unconditionally
+            // instead would break commands whose args rely on exact argv
+            // quoting (e.g. `node -e "..."`), so only fall back on the
+            // specific error this class of command actually produces.
+            if (!useShell && !options.shell && process.platform === 'win32' && err.code === 'ENOENT') {
+              supersededByRetry = true;
+              attempt(true);
+              return;
+            }
+            resolve(1);
+          });
+        };
+        attempt(options.shell ?? false);
       });
     } catch (err) {
       console.error(`❌ Execution failed inside sandbox:`, err);
