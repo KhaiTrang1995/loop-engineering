@@ -1,0 +1,52 @@
+name: 'Loop Engineering Action'
+description: 'Enforce circuit breakers, readiness audits, and sandboxing for autonomous loops natively in CI.'
+author: 'Cobus Greyling'
+
+inputs:
+  pattern:
+    description: 'The loop pattern (e.g. ci-sweeper, pr-babysitter, dependency-sweeper)'
+    required: true
+  command:
+    description: 'The actual agent command to run if gates pass'
+    required: true
+  level:
+    description: 'Budget level for circuit breaker (L1, L2, L3)'
+    required: false
+    default: 'L1'
+  sandbox:
+    description: 'Run the command inside an ephemeral isolated git worktree (loop-sandbox)'
+    required: false
+    default: 'false'
+  sandbox-shell:
+    description: 'Run the sandbox command inside a shell environment (--shell)'
+    required: false
+    default: 'false'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Audit Loop Readiness
+      run: npx --yes @cobusgreyling/loop-audit .
+      shell: bash
+
+    - name: Check Circuit Breaker
+      id: breaker
+      run: |
+        npx --yes @cobusgreyling/loop-context --check --ledger loop-ledger.json \
+          --budget-from-pattern ${{ inputs.pattern }} --budget-level ${{ inputs.level }}
+      shell: bash
+
+    - name: Run Agent (Sandbox)
+      if: ${{ inputs.sandbox == 'true' }}
+      run: |
+        if [ "${{ inputs.sandbox-shell }}" == "true" ]; then
+          npx --yes @cobusgreyling/loop-sandbox run --shell -- ${{ inputs.command }}
+        else
+          npx --yes @cobusgreyling/loop-sandbox run -- ${{ inputs.command }}
+        fi
+      shell: bash
+
+    - name: Run Agent (Direct)
+      if: ${{ inputs.sandbox != 'true' }}
+      run: ${{ inputs.command }}
+      shell: bash

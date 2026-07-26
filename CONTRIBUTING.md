@@ -13,7 +13,7 @@ This repo is a **practical engineering reference**, not a hype collection. We we
 | Starter kit | `starters/` |
 | Doc improvement | `docs/` |
 
-## Contribution ladder
+## Contribution Ladder
 
 Start small — every merged PR counts.
 
@@ -24,7 +24,7 @@ Start small — every merged PR counts.
 | **3** | Half day | New starter, skill template, or MCP cookbook entry |
 | **4** | Full day | Full pattern in `patterns/` + `patterns/registry.yaml` entry |
 
-**Fastest paths:** [Add your project to adopters](https://github.com/cobusgreyling/loop-engineering/issues/new?template=add-adopter.yml) · [Share a story issue](https://github.com/cobusgreyling/loop-engineering/issues/new?template=share-story.yml) · [`good first issue` backlog](https://github.com/cobusgreyling/loop-engineering/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+**Fastest paths:** [Help wanted (README)](./README.md#help-wanted) · [Add Adopter](https://github.com/cobusgreyling/loop-engineering/issues/new?template=add-adopter.yml) · [Share a story](https://github.com/cobusgreyling/loop-engineering/issues/new?template=share-story.yml) · [open `good first issue` backlog](https://github.com/cobusgreyling/loop-engineering/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 
 ## Pattern Requirements
 
@@ -68,7 +68,7 @@ In short:
 - Tool-agnostic by default; tool-specific in labeled sections
 - Harassment and bad-faith participation are not tolerated
 
-## Maintainer response (adopters & stories)
+## Maintainer Response (Adopters & Stories)
 
 PRs that only touch `stories/`, `docs/adopters.md`, or the [Add Adopter](https://github.com/cobusgreyling/loop-engineering/issues/new?template=add-adopter.yml) template get **same-day review** when possible:
 
@@ -83,7 +83,7 @@ Automation posts a welcome comment on new story/adopter PRs (see `.github/workfl
 - **Questions**: [Ask anything](https://github.com/cobusgreyling/loop-engineering/discussions/327) (preferred) or issue with label `question`
 - **Show your loop**: [Show your loop](https://github.com/cobusgreyling/loop-engineering/discussions/326), [Add Adopter issue](https://github.com/cobusgreyling/loop-engineering/issues/new?template=add-adopter.yml), or a row in [docs/adopters.md](./docs/adopters.md)
 - **Loop Ready badge**: `npx @cobusgreyling/loop-audit . --badge` — paste into your README
-- **Good first issues**: look for label [`good first issue`](https://github.com/cobusgreyling/loop-engineering/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+- **Good first issues**: curated list in [README § Help wanted](./README.md#help-wanted); filter: [`good first issue`](https://github.com/cobusgreyling/loop-engineering/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 - **Hall of fame**: [CONTRIBUTORS.md](./CONTRIBUTORS.md) — regenerate after merges with `npm run contributors:generate`
 - **Security**: see [SECURITY.md](./SECURITY.md) — do not file public issues for exploitable vulnerabilities
 

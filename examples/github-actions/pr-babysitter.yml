@@ -16,8 +16,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Placeholder — wire to your agent runtime
-        run: |
-          echo "Run pr-review-triage against open PRs."
-          echo "Update pr-babysitter-state.md in a follow-up PR."
-          echo "No auto-merge in week one — see patterns/pr-babysitter.md"
+      - name: Invoke PR Babysitter Agent
+        uses: cobusgreyling/loop-engineering/tools/loop-action@main
+        with:
+          pattern: 'pr-babysitter'
+          level: 'L1'
+          sandbox-shell: 'true'
+          command: |
+            echo "Run pr-review-triage against open PRs."
+            echo "Update pr-babysitter-state.md in a follow-up PR."
+            echo "No auto-merge in week one — see patterns/pr-babysitter.md"

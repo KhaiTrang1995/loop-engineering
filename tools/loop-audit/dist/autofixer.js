@@ -147,13 +147,25 @@ const AGENTS_MD_TEMPLATE = `# AGENTS.md — Project Conventions
 - Never auto-merge changes.
 - Ensure all loops isolate their work in worktrees.
 `;
-const GATE_YAML_TEMPLATE = `# gate.yaml - Explicit human approval gates
+const GATE_YAML_TEMPLATE = `# Machine-readable twin of docs/safety.md, enforced by \`loop-gate check\`.
+# See templates/gate.yaml.template in loop-engineering for the full reference.
+version: 1
 
-gates:
-  - name: "Auto-merge to main"
-    description: "Never auto-merge changes to the main branch."
-    required_approvers:
-      - "human"
+denylist:
+  - ".env"
+  - ".env.*"
+  - "**/secrets/**"
+  - "**/credentials/**"
+  - "**/*_key*"
+  - "**/*_secret*"
+
+# Escalate instead of auto-merging when a change touches more than this many files.
+maxFiles: 10
+
+# --action auto-merge only proceeds if every changed path matches one of these.
+autoMergeAllowlist:
+  - "docs/**"
+  - "**/*.md"
 `;
 export async function autoFixProject(target, result) {
     const root = path.resolve(target);
