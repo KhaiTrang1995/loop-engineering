@@ -24,6 +24,10 @@ async function main() {
         }
         let shell = false;
         let base;
+        let lockPaths;
+        let lockOwner;
+        let lockTtl;
+        let lockWait;
         for (let i = 0; i < sandboxOptionsArgs.length; i++) {
             const arg = sandboxOptionsArgs[i];
             if (arg === '--shell') {
@@ -31,6 +35,22 @@ async function main() {
             }
             else if (arg === '--base') {
                 base = sandboxOptionsArgs[++i];
+            }
+            else if (arg === '--lock-paths') {
+                lockPaths = (sandboxOptionsArgs[++i] ?? '').split(',').map((p) => p.trim()).filter(Boolean);
+                if (lockPaths.length === 0) {
+                    console.error('❌ --lock-paths requires at least one non-empty, comma-separated glob.');
+                    process.exit(1);
+                }
+            }
+            else if (arg === '--lock-owner') {
+                lockOwner = sandboxOptionsArgs[++i];
+            }
+            else if (arg === '--lock-ttl') {
+                lockTtl = sandboxOptionsArgs[++i];
+            }
+            else if (arg === '--lock-wait') {
+                lockWait = sandboxOptionsArgs[++i];
             }
             else {
                 console.error(`❌ Unknown option: ${arg}`);
@@ -40,7 +60,7 @@ async function main() {
         const exe = targetCommandArgs[0];
         const exeArgs = targetCommandArgs.slice(1);
         try {
-            const result = await runInSandbox(root, exe, exeArgs, { shell, base });
+            const result = await runInSandbox(root, exe, exeArgs, { shell, base, lockPaths, lockOwner, lockTtl, lockWait });
             if (result.hasChanges && result.patchFile) {
                 console.log('\n==================================================');
                 console.log(`🎉 Run completed. Changes isolated successfully!`);
@@ -100,10 +120,17 @@ Options for 'run':
                npm-installed .cmd shims like npx/tsc retry through a shell
                automatically on ENOENT, so this is rarely needed there)
   --base       The base branch to branch the worktree from (default: current HEAD)
-  
+  --lock-paths       Comma-separated globs to hold a loop-worktree advisory
+                     lock on for the run's duration, so a scheduled loop can't
+                     touch the same paths concurrently. Off by default.
+  --lock-owner       Lock owner name (default: the run's generated id)
+  --lock-ttl         e.g. 30m -- passed through to loop-worktree's --ttl
+  --lock-wait        e.g. 5m -- passed through to loop-worktree's --wait
+
 Examples:
   npx @cobusgreyling/loop-sandbox run -- node script.js
   npx @cobusgreyling/loop-sandbox run --shell -- bash -c "echo 'hello' > test.txt"
+  npx @cobusgreyling/loop-sandbox run --lock-paths "src/**,docs/**" -- npx my-agent
   npx @cobusgreyling/loop-sandbox review
 `);
 }

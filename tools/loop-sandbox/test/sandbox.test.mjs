@@ -2,10 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { runInSandbox, listPatches } from '../dist/sandbox.js';
 import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { mkdir, rm, writeFile, stat, readFile } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import { createWorktree } from '@cobusgreyling/loop-worktree';
+import { lockPaths, listLocks } from '@cobusgreyling/loop-worktree/dist/lock.js';
+
+const testDir = path.dirname(fileURLToPath(import.meta.url));
+const sandboxDistUrl = pathToFileURL(path.join(testDir, '../dist/sandbox.js')).href;
 
 async function setupTestRepo() {
   const dir = path.join(tmpdir(), `sandbox-test-${Date.now()}-${Math.floor(Math.random()*1000)}`);
@@ -106,6 +111,86 @@ test('binary patch captures exactly without utf8 corruption', async () => {
     assert.equal(appliedContent[1], 0xFF);
     assert.equal(appliedContent[2], 0xFE);
     assert.equal(appliedContent[3], 0xFD);
+  } finally {
+    await rm(root, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
+test('lockPaths option holds and releases a loop-worktree lock around the run', async () => {
+  const root = await setupTestRepo();
+  try {
+    const result = await runInSandbox(root, 'node', ['-e', 'require("fs").writeFileSync("locked.txt", "x");'], {
+      lockPaths: ['src/**'],
+      lockOwner: 'lock-test-owner',
+    });
+    assert.ok(result.hasChanges);
+
+    // The lock must be released once the run completes -- otherwise it would
+    // strand future loops out of src/** indefinitely with no TTL set.
+    const locks = await listLocks(root);
+    assert.equal(locks.length, 0);
+  } finally {
+    await rm(root, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
+test('lockPaths option refuses to run when another owner holds an overlapping lock', async () => {
+  const root = await setupTestRepo();
+  try {
+    await lockPaths({ root, owner: 'other-loop', paths: ['src/**'] });
+
+    await assert.rejects(
+      runInSandbox(root, 'node', ['-e', 'require("fs").writeFileSync("should-not-run.txt", "x");'], {
+        lockPaths: ['src/nested/**'],
+        lockOwner: 'sandbox-test-owner',
+      }),
+      /locked by owner "other-loop"/,
+    );
+
+    // Blocked before the worktree was ever created -- nothing to clean up.
+    const worktreeList = execSync('git worktree list --porcelain', { cwd: root, encoding: 'utf8' });
+    assert.equal(worktreeList.match(/^worktree /gm)?.length, 1, 'only the main worktree should exist');
+    // The other loop's lock is untouched by the rejected attempt.
+    const locks = await listLocks(root);
+    assert.equal(locks.length, 1);
+    assert.equal(locks[0].owner, 'other-loop');
+  } finally {
+    await rm(root, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
+test('SIGINT mid-run releases the lock instead of stranding it', async () => {
+  const root = await setupTestRepo();
+  try {
+    // Run in a dedicated child process and self-trigger SIGINT via
+    // process.emit from inside it -- real OS signal delivery to a spawned
+    // process is unreliable to script from a test (especially on Windows),
+    // but process.emit('SIGINT') exercises the exact same registered
+    // listener a real signal would, without that flakiness. The sandboxed
+    // "user command" (setInterval) never exits on its own, so this also
+    // covers cleanup() running while the child it's meant to clean up after
+    // is still alive.
+    const child = spawn(process.execPath, ['--input-type=module', '-e', `
+      const mod = await import(${JSON.stringify(sandboxDistUrl)});
+      mod.runInSandbox(${JSON.stringify(root)}, 'node', ['-e', 'setInterval(() => {}, 1000)'], {
+        lockPaths: ['src/**'],
+        lockOwner: 'sigint-test-owner',
+      }).catch(() => {});
+      setTimeout(() => process.emit('SIGINT'), 1000);
+    `], { stdio: 'ignore' });
+
+    const exited = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => resolve(false), 10_000);
+      child.on('exit', () => { clearTimeout(timer); resolve(true); });
+      child.on('error', (err) => { clearTimeout(timer); reject(err); });
+    });
+    if (!exited) {
+      child.kill('SIGKILL');
+      assert.fail('child did not exit after synthetic SIGINT within 10s -- the lock is likely stranded');
+    }
+
+    const locks = await listLocks(root);
+    assert.equal(locks.length, 0, 'lock must be released after SIGINT, not left stranded with no TTL');
   } finally {
     await rm(root, { recursive: true, force: true }).catch(() => {});
   }
