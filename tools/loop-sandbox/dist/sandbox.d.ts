@@ -1,6 +1,18 @@
 export interface SandboxOptions {
     shell?: boolean;
     base?: string;
+    /**
+     * Glob(s) to hold an advisory loop-worktree lock on for the run's duration,
+     * so a scheduled loop can't touch the same paths concurrently. Unset by
+     * default -- sandbox runs are unprotected unless the caller opts in.
+     */
+    lockPaths?: string[];
+    /** Lock owner name; defaults to the run's generated id. */
+    lockOwner?: string;
+    /** e.g. "30m" -- passed straight through to loop-worktree's --ttl. */
+    lockTtl?: string;
+    /** e.g. "5m" -- passed straight through to loop-worktree's --wait. */
+    lockWait?: string;
 }
 export interface SandboxResult {
     runId: string;
