@@ -4,7 +4,7 @@ import { runInSandbox, listPatches } from '../dist/sandbox.js';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
-import { mkdir, rm, writeFile, stat, readFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile, stat, readFile, readdir } from 'node:fs/promises';
 import { execSync, spawn } from 'node:child_process';
 import { createWorktree } from '@cobusgreyling/loop-worktree';
 import { lockPaths, listLocks } from '@cobusgreyling/loop-worktree/dist/lock.js';
@@ -154,6 +154,111 @@ test('lockPaths option refuses to run when another owner holds an overlapping lo
     const locks = await listLocks(root);
     assert.equal(locks.length, 1);
     assert.equal(locks[0].owner, 'other-loop');
+  } finally {
+    await rm(root, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
+test('lockPaths option holds the lock while the run is still in progress, not just after', async () => {
+  const root = await setupTestRepo();
+  try {
+    const startedMarker = path.join(root, 'started.txt');
+    const goMarker = path.join(root, 'go.txt');
+
+    const runPromise = runInSandbox(root, 'node', [
+      '-e',
+      `require("fs").writeFileSync(${JSON.stringify(startedMarker)}, "x");` +
+        `const iv = setInterval(() => { if (require("fs").existsSync(${JSON.stringify(goMarker)})) { clearInterval(iv); process.exit(0); } }, 50);`,
+    ], { lockPaths: ['src/**'], lockOwner: 'midrun-owner' });
+
+    while (!(await stat(startedMarker).catch(() => null))) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    // The lock must be visible while the sandboxed command is still running,
+    // not only after runInSandbox() resolves.
+    const locksMidRun = await listLocks(root);
+    assert.equal(locksMidRun.length, 1);
+    assert.equal(locksMidRun[0].owner, 'midrun-owner');
+
+    await writeFile(goMarker, 'go');
+    await runPromise;
+
+    const locksAfter = await listLocks(root);
+    assert.equal(locksAfter.length, 0);
+  } finally {
+    await rm(root, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
+test('lock is released even when patch extraction fails and the worktree is left behind', async () => {
+  const root = await setupTestRepo();
+  try {
+    const result = await runInSandbox(root, 'node', [
+      '-e',
+      'const fs = require("fs"); const gitdir = fs.readFileSync(".git", "utf8").trim().replace("gitdir: ", ""); fs.rmSync(gitdir, {recursive: true, force: true});',
+    ], { lockPaths: ['src/**'], lockOwner: 'extract-fail-owner' });
+
+    assert.equal(result.hasChanges, false);
+
+    // The worktree is deliberately left on disk for manual recovery when
+    // extraction fails...
+    const statObj = await stat(path.join(root, '.loop-worktrees', result.runId));
+    assert.ok(statObj.isDirectory(), 'worktree should remain on disk');
+
+    // ...but lock release has nothing to do with whether patch extraction
+    // succeeded, so it must still happen.
+    const locks = await listLocks(root);
+    assert.equal(locks.length, 0);
+  } finally {
+    await rm(root, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
+test('a second SIGINT while cleanup is in flight does not exit before the lock is released', async () => {
+  const root = await setupTestRepo();
+  try {
+    // Same self-emitting-SIGINT approach as the test above, but fires SIGINT
+    // twice in quick succession. The bug this guards against: the first cut
+    // re-ran cleanup() on every signal and let a boolean guard turn repeat
+    // calls into instant no-ops, so the *second* signal's
+    // `.finally(() => process.exit(1))` could fire before the *first*
+    // signal's cleanup (lock release, worktree removal) ever finished.
+    const child = spawn(process.execPath, ['--input-type=module', '-e', `
+      const mod = await import(${JSON.stringify(sandboxDistUrl)});
+      mod.runInSandbox(${JSON.stringify(root)}, 'node', ['-e', 'setInterval(() => {}, 1000)'], {
+        lockPaths: ['src/**'],
+        lockOwner: 'double-sigint-owner',
+      }).catch(() => {});
+      setTimeout(() => process.emit('SIGINT'), 1000);
+      setTimeout(() => process.emit('SIGINT'), 1030);
+    `], { stdio: 'ignore' });
+
+    const exited = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => resolve(false), 10_000);
+      child.on('exit', () => { clearTimeout(timer); resolve(true); });
+      child.on('error', (err) => { clearTimeout(timer); reject(err); });
+    });
+    if (!exited) {
+      child.kill('SIGKILL');
+      assert.fail('child did not exit after a double synthetic SIGINT within 10s -- the lock is likely stranded');
+    }
+
+    const locks = await listLocks(root);
+    assert.equal(locks.length, 0, 'a second SIGINT during cleanup must not exit before the lock is released');
+
+    // The lock release itself is a fast fs.unlink and tends to finish inside
+    // the race window regardless of this bug -- the sharper signal is
+    // whether the *slower* worktree teardown (spawns `git worktree remove`)
+    // also got to finish. Under the old guard-based cleanup, the second
+    // signal's process.exit() could cut that off mid-flight and leave a
+    // `sandbox-*` directory behind under .loop-worktrees (confirmed by
+    // reproducing this against the pre-fix code before writing this test).
+    const worktreeEntries = await readdir(path.join(root, '.loop-worktrees')).catch(() => []);
+    assert.ok(
+      !worktreeEntries.some((name) => name.startsWith('sandbox-')),
+      `worktree cleanup must finish even under a double signal, found: ${worktreeEntries.join(', ')}`,
+    );
   } finally {
     await rm(root, { recursive: true, force: true }).catch(() => {});
   }

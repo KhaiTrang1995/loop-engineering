@@ -49,7 +49,7 @@ loop-sandbox <command> [options]
 
 | Option | Description |
 |--------|-------------|
-| `--shell` | Spawns the command using `shell: true` (for bash -c, etc.) |
+| `--shell` | Forces `shell: true` (for `bash -c`, etc.). On Windows, npm-installed `.cmd` shims (`npx`, `tsc`, ...) that fail with `ENOENT` are automatically retried through a shell, so this is rarely needed there. |
 | `--base <branch>` | The base branch for the worktree (defaults to current HEAD) |
 | `--lock-paths <globs>` | Comma-separated globs to hold a [`loop-worktree`](../loop-worktree) advisory lock on for the run's duration, so a scheduled loop can't touch the same paths concurrently. Off by default -- see [Multi-loop safety](#multi-loop-safety) below. |
 | `--lock-owner <name>` | Lock owner name (defaults to the run's generated id) |

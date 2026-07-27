@@ -8,6 +8,11 @@ import { createWorktree, isGitRepo, gc } from '@cobusgreyling/loop-worktree';
 // this resolves cleanly; a re-export from the package's main entry was tried
 // first but creates a module-load cycle (lock.js reads MANIFEST_DIR from
 // worktree.js, which would need lock.js's own export to finish first).
+//
+// This reaches into loop-worktree's compiled internals rather than a public
+// subpath export, since none exists yet -- a supported `loop-worktree/lock`
+// entry point would be a better long-term home for this, tracked as a
+// follow-up rather than done here to keep this change scoped to sandbox.ts.
 import { lockPaths, unlockOwner } from '@cobusgreyling/loop-worktree/dist/lock.js';
 const runExec = promisify(execFile);
 /** Run a git command in cwd, returning stdout trimmed. Throws on error. */
@@ -41,43 +46,61 @@ export async function runInSandbox(root, command, args, options = {}) {
     await mkdir(patchesDir, { recursive: true });
     const baseBranch = options.base || await git(['rev-parse', '--abbrev-ref', 'HEAD'], root).catch(() => 'main');
     const lockOwner = options.lockOwner ?? runId;
-    let lockHeld = false;
+    // Whether a lock was *requested*, not whether it was confirmed acquired --
+    // lockPaths() can be interrupted mid-wait (e.g. by a signal during
+    // --lock-wait), leaving only a `<owner>.wait.json` file with no matching
+    // lock. unlockOwner() removes either or both and is a safe no-op if
+    // neither exists, so gating cleanup on the original request (rather than
+    // on successful acquisition) also sweeps up that stray wait file.
+    const lockRequested = Boolean(options.lockPaths && options.lockPaths.length > 0);
     let worktreeAbsPath = null;
     let extractionFailed = false;
-    // Cleanup/lock-release must run on every exit path, including Ctrl+C mid-run
-    // -- both are guarded on state (lockHeld / worktreeAbsPath) rather than
-    // living in separate handlers, since a signal can land before, during, or
-    // after the worktree exists, and an unreleased lock (no --lock-ttl means it
-    // never expires on its own) would otherwise strand every future lock on the
-    // same paths until someone runs `loop-worktree unlock` by hand.
-    let isCleaningUp = false;
-    const cleanup = async () => {
-        if (isCleaningUp)
-            return;
-        isCleaningUp = true;
-        if (worktreeAbsPath) {
-            if (extractionFailed) {
-                console.log(`⚠️ Patch extraction failed. The worktree at ${worktreeAbsPath} and branch loop/${runId} were left on disk for manual recovery.`);
-            }
-            else {
-                console.log(`🧹 Cleaning up sandbox worktree...`);
-                try {
-                    await git(['worktree', 'remove', '--force', worktreeAbsPath], root);
-                    await git(['branch', '-D', `loop/${runId}`], root).catch(() => { });
-                    await gc({ root, force: false });
+    let activeChild = null;
+    // Cleanup must run on every exit path, including Ctrl+C mid-run, and
+    // exactly once even if a signal lands twice: the previous shape re-invoked
+    // cleanup() on every signal and let it no-op past a boolean guard while
+    // still calling process.exit(1) right after -- a second Ctrl+C during a
+    // slow `git worktree remove` would exit before the *first* cleanup's lock
+    // release ever ran, stranding a no-TTL lock. Sharing one promise across
+    // every caller means every signal (first or repeated) waits on the same
+    // in-flight cleanup before exiting.
+    let cleanupPromise = null;
+    const cleanup = () => {
+        if (!cleanupPromise) {
+            cleanupPromise = (async () => {
+                // Stop the sandboxed command first so it can't keep writing into the
+                // worktree (or racing the lock's protected paths) after cleanup has
+                // started tearing things down around it.
+                activeChild?.kill();
+                // Release the lock before worktree teardown: it's the resource other
+                // loops are blocked on, and a slow worktree removal shouldn't delay
+                // it.
+                if (lockRequested) {
+                    console.log(`🔓 Releasing lock held by "${lockOwner}"...`);
+                    await unlockOwner(root, lockOwner).catch((err) => {
+                        console.error(`❌ Failed to release lock for "${lockOwner}". Run \`loop-worktree unlock --owner ${lockOwner}\` manually:`, err);
+                    });
                 }
-                catch (err) {
-                    console.error(`❌ Failed to cleanup sandbox worktree. It may need manual removal:`, err);
-                    process.exitCode = 1;
+                if (worktreeAbsPath) {
+                    if (extractionFailed) {
+                        console.log(`⚠️ Patch extraction failed. The worktree at ${worktreeAbsPath} and branch loop/${runId} were left on disk for manual recovery.`);
+                    }
+                    else {
+                        console.log(`🧹 Cleaning up sandbox worktree...`);
+                        try {
+                            await git(['worktree', 'remove', '--force', worktreeAbsPath], root);
+                            await git(['branch', '-D', `loop/${runId}`], root).catch(() => { });
+                            await gc({ root, force: false });
+                        }
+                        catch (err) {
+                            console.error(`❌ Failed to cleanup sandbox worktree. It may need manual removal:`, err);
+                            process.exitCode = 1;
+                        }
+                    }
                 }
-            }
+            })();
         }
-        if (lockHeld) {
-            console.log(`🔓 Releasing lock held by "${lockOwner}"...`);
-            await unlockOwner(root, lockOwner).catch((err) => {
-                console.error(`❌ Failed to release lock for "${lockOwner}". Run \`loop-worktree unlock --owner ${lockOwner}\` manually:`, err);
-            });
-        }
+        return cleanupPromise;
     };
     const sigHandler = () => {
         cleanup().finally(() => process.exit(1));
@@ -85,10 +108,9 @@ export async function runInSandbox(root, command, args, options = {}) {
     process.on('SIGINT', sigHandler);
     process.on('SIGTERM', sigHandler);
     try {
-        if (options.lockPaths && options.lockPaths.length > 0) {
+        if (lockRequested) {
             console.log(`\n🔒 Locking ${options.lockPaths.join(', ')} as "${lockOwner}"...`);
             await lockPaths({ root, owner: lockOwner, paths: options.lockPaths, ttl: options.lockTtl, wait: options.lockWait });
-            lockHeld = true;
         }
         console.log(`\n📦 Creating ephemeral worktree isolation: ${runId}`);
         // 2. Create the worktree
@@ -118,9 +140,11 @@ export async function runInSandbox(root, command, args, options = {}) {
                         stdio: 'inherit',
                         shell: useShell
                     });
+                    activeChild = child;
                     child.on('close', (code) => {
                         if (!useShell && supersededByRetry)
                             return;
+                        activeChild = null;
                         resolve(code);
                     });
                     child.on('error', (err) => {
@@ -137,6 +161,7 @@ export async function runInSandbox(root, command, args, options = {}) {
                             attempt(true);
                             return;
                         }
+                        activeChild = null;
                         resolve(1);
                     });
                 };
