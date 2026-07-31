@@ -4,12 +4,34 @@ import { mkdir, writeFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { createWorktree, isGitRepo, gc } from '@cobusgreyling/loop-worktree';
+// loop-worktree's package.json has no "exports" map restricting subpaths, so
+// this resolves cleanly; a re-export from the package's main entry was tried
+// first but creates a module-load cycle (lock.js reads MANIFEST_DIR from
+// worktree.js, which would need lock.js's own export to finish first).
+//
+// This reaches into loop-worktree's compiled internals rather than a public
+// subpath export, since none exists yet -- a supported `loop-worktree/lock`
+// entry point would be a better long-term home for this, tracked as a
+// follow-up rather than done here to keep this change scoped to sandbox.ts.
+import { lockPaths, unlockOwner } from '@cobusgreyling/loop-worktree/dist/lock.js';
 
 const runExec = promisify(execFile);
 
 export interface SandboxOptions {
   shell?: boolean;
   base?: string;
+  /**
+   * Glob(s) to hold an advisory loop-worktree lock on for the run's duration,
+   * so a scheduled loop can't touch the same paths concurrently. Unset by
+   * default -- sandbox runs are unprotected unless the caller opts in.
+   */
+  lockPaths?: string[];
+  /** Lock owner name; defaults to the run's generated id. */
+  lockOwner?: string;
+  /** e.g. "30m" -- passed straight through to loop-worktree's --ttl. */
+  lockTtl?: string;
+  /** e.g. "5m" -- passed straight through to loop-worktree's --wait. */
+  lockWait?: string;
 }
 
 export interface SandboxResult {
@@ -45,7 +67,7 @@ export async function runInSandbox(root: string, command: string, args: string[]
   }
 
   const runId = `sandbox-${crypto.randomBytes(4).toString('hex')}`;
-  
+
   // 1. Setup paths
   const sandboxDir = path.join(root, '.loop-sandbox');
   const patchesDir = path.join(sandboxDir, 'patches');
@@ -53,45 +75,63 @@ export async function runInSandbox(root: string, command: string, args: string[]
 
   const baseBranch = options.base || await git(['rev-parse', '--abbrev-ref', 'HEAD'], root).catch(() => 'main');
 
-  console.log(`\n📦 Creating ephemeral worktree isolation: ${runId}`);
-  
-  // 2. Create the worktree
-  const entry = await createWorktree({
-    root,
-    runId,
-    pattern: 'sandbox', // dummy pattern
-    base: baseBranch
-  });
-
-  const worktreeAbsPath = path.resolve(root, entry.path);
-  
-  console.log(`🚀 Executing inside sandbox: ${command} ${args.join(' ')}`);
-
-  let exitCode: number | null = null;
-  let hasChanges = false;
-  let patchFilePath: string | null = null;
+  const lockOwner = options.lockOwner ?? runId;
+  // Whether a lock was *requested*, not whether it was confirmed acquired --
+  // lockPaths() can be interrupted mid-wait (e.g. by a signal during
+  // --lock-wait), leaving only a `<owner>.wait.json` file with no matching
+  // lock. unlockOwner() removes either or both and is a safe no-op if
+  // neither exists, so gating cleanup on the original request (rather than
+  // on successful acquisition) also sweeps up that stray wait file.
+  const lockRequested = Boolean(options.lockPaths && options.lockPaths.length > 0);
+  let worktreeAbsPath: string | null = null;
   let extractionFailed = false;
+  let activeChild: ReturnType<typeof spawn> | null = null;
 
-  // Signal handlers for graceful cleanup if user ctrl+c's during run
-  let isCleaningUp = false;
-  const cleanup = async () => {
-    if (isCleaningUp) return;
-    isCleaningUp = true;
+  // Cleanup must run on every exit path, including Ctrl+C mid-run, and
+  // exactly once even if a signal lands twice: the previous shape re-invoked
+  // cleanup() on every signal and let it no-op past a boolean guard while
+  // still calling process.exit(1) right after -- a second Ctrl+C during a
+  // slow `git worktree remove` would exit before the *first* cleanup's lock
+  // release ever ran, stranding a no-TTL lock. Sharing one promise across
+  // every caller means every signal (first or repeated) waits on the same
+  // in-flight cleanup before exiting.
+  let cleanupPromise: Promise<void> | null = null;
+  const cleanup = (): Promise<void> => {
+    if (!cleanupPromise) {
+      cleanupPromise = (async () => {
+        // Stop the sandboxed command first so it can't keep writing into the
+        // worktree (or racing the lock's protected paths) after cleanup has
+        // started tearing things down around it.
+        activeChild?.kill();
 
-    if (extractionFailed) {
-      console.log(`⚠️ Patch extraction failed. The worktree at ${worktreeAbsPath} and branch loop/${runId} were left on disk for manual recovery.`);
-      return;
+        // Release the lock before worktree teardown: it's the resource other
+        // loops are blocked on, and a slow worktree removal shouldn't delay
+        // it.
+        if (lockRequested) {
+          console.log(`🔓 Releasing lock held by "${lockOwner}"...`);
+          await unlockOwner(root, lockOwner).catch((err) => {
+            console.error(`❌ Failed to release lock for "${lockOwner}". Run \`loop-worktree unlock --owner ${lockOwner}\` manually:`, err);
+          });
+        }
+
+        if (worktreeAbsPath) {
+          if (extractionFailed) {
+            console.log(`⚠️ Patch extraction failed. The worktree at ${worktreeAbsPath} and branch loop/${runId} were left on disk for manual recovery.`);
+          } else {
+            console.log(`🧹 Cleaning up sandbox worktree...`);
+            try {
+              await git(['worktree', 'remove', '--force', worktreeAbsPath], root);
+              await git(['branch', '-D', `loop/${runId}`], root).catch(() => {});
+              await gc({ root, force: false });
+            } catch (err) {
+              console.error(`❌ Failed to cleanup sandbox worktree. It may need manual removal:`, err);
+              process.exitCode = 1;
+            }
+          }
+        }
+      })();
     }
-
-    console.log(`🧹 Cleaning up sandbox worktree...`);
-    try {
-      await git(['worktree', 'remove', '--force', worktreeAbsPath], root);
-      await git(['branch', '-D', `loop/${runId}`], root).catch(() => {});
-      await gc({ root, force: false });
-    } catch (err) {
-      console.error(`❌ Failed to cleanup sandbox worktree. It may need manual removal:`, err);
-      process.exitCode = 1;
-    }
+    return cleanupPromise;
   };
 
   const sigHandler = () => {
@@ -102,6 +142,29 @@ export async function runInSandbox(root: string, command: string, args: string[]
   process.on('SIGTERM', sigHandler);
 
   try {
+    if (lockRequested) {
+      console.log(`\n🔒 Locking ${options.lockPaths!.join(', ')} as "${lockOwner}"...`);
+      await lockPaths({ root, owner: lockOwner, paths: options.lockPaths!, ttl: options.lockTtl, wait: options.lockWait });
+    }
+
+    console.log(`\n📦 Creating ephemeral worktree isolation: ${runId}`);
+
+    // 2. Create the worktree
+    const entry = await createWorktree({
+      root,
+      runId,
+      pattern: 'sandbox', // dummy pattern
+      base: baseBranch
+    });
+
+    worktreeAbsPath = path.resolve(root, entry.path);
+
+    console.log(`🚀 Executing inside sandbox: ${command} ${args.join(' ')}`);
+
+    let exitCode: number | null = null;
+    let hasChanges = false;
+    let patchFilePath: string | null = null;
+
     // 3. Execute the user's command
     try {
       exitCode = await new Promise<number | null>((resolve) => {
@@ -114,13 +177,15 @@ export async function runInSandbox(root: string, command: string, args: string[]
 
         const attempt = (useShell: boolean) => {
           const child = spawn(command, args, {
-            cwd: worktreeAbsPath,
+            cwd: worktreeAbsPath!,
             stdio: 'inherit',
             shell: useShell
           });
+          activeChild = child;
 
           child.on('close', (code) => {
             if (!useShell && supersededByRetry) return;
+            activeChild = null;
             resolve(code);
           });
           child.on('error', (err: NodeJS.ErrnoException) => {
@@ -136,6 +201,7 @@ export async function runInSandbox(root: string, command: string, args: string[]
               attempt(true);
               return;
             }
+            activeChild = null;
             resolve(1);
           });
         };
@@ -152,7 +218,7 @@ export async function runInSandbox(root: string, command: string, args: string[]
     try {
       await git(['add', '-A'], worktreeAbsPath);
       const diffStat = await git(['diff', '--cached', '--stat'], worktreeAbsPath);
-      
+
       if (diffStat) {
         hasChanges = true;
         patchFilePath = path.join(patchesDir, `${runId}.patch`);
@@ -167,18 +233,17 @@ export async function runInSandbox(root: string, command: string, args: string[]
       extractionFailed = true;
     }
 
+    return {
+      runId,
+      patchFile: patchFilePath,
+      exitCode,
+      hasChanges
+    };
   } finally {
     process.removeListener('SIGINT', sigHandler);
     process.removeListener('SIGTERM', sigHandler);
     await cleanup();
   }
-
-  return {
-    runId,
-    patchFile: patchFilePath,
-    exitCode,
-    hasChanges
-  };
 }
 
 export interface ReviewItem {

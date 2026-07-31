@@ -51,6 +51,10 @@ loop-sandbox <command> [options]
 |--------|-------------|
 | `--shell` | Forces `shell: true` (for `bash -c`, etc.). On Windows, npm-installed `.cmd` shims (`npx`, `tsc`, ...) that fail with `ENOENT` are automatically retried through a shell, so this is rarely needed there. |
 | `--base <branch>` | The base branch for the worktree (defaults to current HEAD) |
+| `--lock-paths <globs>` | Comma-separated globs to hold a [`loop-worktree`](../loop-worktree) advisory lock on for the run's duration, so a scheduled loop can't touch the same paths concurrently. Off by default -- see [Multi-loop safety](#multi-loop-safety) below. |
+| `--lock-owner <name>` | Lock owner name (defaults to the run's generated id) |
+| `--lock-ttl <dur>` | e.g. `30m` -- passed through to `loop-worktree`'s `--ttl` |
+| `--lock-wait <dur>` | e.g. `5m` -- passed through to `loop-worktree`'s `--wait` |
 
 ### Examples
 
@@ -63,6 +67,11 @@ npx @cobusgreyling/loop-sandbox run -- npx my-agent
 **Running a shell command:**
 ```bash
 npx @cobusgreyling/loop-sandbox run --shell -- bash -c "echo 'hello' > test.txt"
+```
+
+**Running alongside a scheduled loop that touches the same files:**
+```bash
+npx @cobusgreyling/loop-sandbox run --lock-paths "src/**,docs/**" -- npx my-agent
 ```
 
 **Reviewing and applying patches:**
@@ -79,3 +88,13 @@ npx @cobusgreyling/loop-sandbox review
 ## How it works
 
 Under the hood, `loop-sandbox` leverages `@cobusgreyling/loop-worktree` and native `git worktree` primitives. It creates a temporary branch from your current HEAD, spawns your process with its `cwd` set to the isolated tree, runs `git diff --cached` to generate the patch, and uses `git worktree remove --force` to clean up.
+
+## Multi-loop safety
+
+A sandbox run is not, by itself, protected against a scheduled loop editing
+the same files at the same time -- `--lock-paths` opts a run into
+`loop-worktree`'s advisory lock (acquired before the worktree is created,
+released once the run finishes) so a colliding scheduled loop's own `lock`
+call fails loudly instead of racing silently. See
+[docs/multi-loop.md](../../docs/multi-loop.md) for the wider convention this
+follows.

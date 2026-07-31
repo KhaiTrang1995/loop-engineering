@@ -58,6 +58,11 @@ hand-checked convention: a loop's control script runs `loop-worktree lock --path
 paired by convention in the control script, the same way `loop-context --check` and
 `loop-worktree mark --status escalated` are paired.
 
+[`loop-sandbox`](../tools/loop-sandbox) follows the same convention through its own
+`--lock-paths` option, since a one-shot sandboxed agent run is just another kind of
+control script that can collide with a scheduled loop's files. It is opt-in — an
+unadorned `loop-sandbox run` is not lock-protected.
+
 ## Human inbox
 
 Use a shared section in `STATE.md`:
