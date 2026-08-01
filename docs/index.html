@@ -15,7 +15,7 @@ title: Loop Engineering — Showcase
   <link rel="stylesheet" href="{{ site.baseurl }}/assets/css/showcase.css">
   <link rel="icon" href="https://raw.githubusercontent.com/cobusgreyling/loop-engineering/main/assets/visuals/loop-engineering-logo.svg">
   <script type="module">
-    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.16.0/dist/mermaid.esm.min.mjs";
     mermaid.initialize({
       startOnLoad: true,
       theme: "dark",
@@ -36,7 +36,7 @@ title: Loop Engineering — Showcase
       },
     });
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -1073,11 +1073,8 @@ async function renderTelemetry() {
     const labels = data.map(d => new Date(d.run_id).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
     
     const scores = data.map(d => d.readiness_score || 0);
-    const tokens = data.map((d, i) => {
-      let sum = 0;
-      for (let j = 0; j <= i; j++) sum += (data[j].tokens_estimate || 0);
-      return sum;
-    });
+    let tokenRunningTotal = 0;
+    const tokens = data.map(d => (tokenRunningTotal += (d.tokens_estimate || 0)));
     const automatedRuns = data.map(d => d.outcome === 'escalated' ? 0 : 1);
     const escalatedRuns = data.map(d => d.outcome === 'escalated' ? 1 : 0);
     
