@@ -4,16 +4,7 @@ import { mkdir, writeFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { createWorktree, isGitRepo, gc } from '@cobusgreyling/loop-worktree';
-// loop-worktree's package.json has no "exports" map restricting subpaths, so
-// this resolves cleanly; a re-export from the package's main entry was tried
-// first but creates a module-load cycle (lock.js reads MANIFEST_DIR from
-// worktree.js, which would need lock.js's own export to finish first).
-//
-// This reaches into loop-worktree's compiled internals rather than a public
-// subpath export, since none exists yet -- a supported `loop-worktree/lock`
-// entry point would be a better long-term home for this, tracked as a
-// follow-up rather than done here to keep this change scoped to sandbox.ts.
-import { lockPaths, unlockOwner } from '@cobusgreyling/loop-worktree/dist/lock.js';
+import { lockPaths, unlockOwner } from '@cobusgreyling/loop-worktree/lock';
 
 const runExec = promisify(execFile);
 
