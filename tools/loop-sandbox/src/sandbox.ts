@@ -4,16 +4,7 @@ import { mkdir, writeFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { createWorktree, isGitRepo, gc } from '@cobusgreyling/loop-worktree';
-// loop-worktree's package.json has no "exports" map restricting subpaths, so
-// this resolves cleanly; a re-export from the package's main entry was tried
-// first but creates a module-load cycle (lock.js reads MANIFEST_DIR from
-// worktree.js, which would need lock.js's own export to finish first).
-//
-// This reaches into loop-worktree's compiled internals rather than a public
-// subpath export, since none exists yet -- a supported `loop-worktree/lock`
-// entry point would be a better long-term home for this, tracked as a
-// follow-up rather than done here to keep this change scoped to sandbox.ts.
-import { lockPaths, unlockOwner } from '@cobusgreyling/loop-worktree/dist/lock.js';
+import { lockPaths, unlockOwner } from '@cobusgreyling/loop-worktree/lock';
 
 const runExec = promisify(execFile);
 
@@ -106,12 +97,20 @@ export async function runInSandbox(root: string, command: string, args: string[]
 
         // Release the lock before worktree teardown: it's the resource other
         // loops are blocked on, and a slow worktree removal shouldn't delay
-        // it.
+        // it. Logged only once we know a lock (or stray wait file) actually
+        // existed -- lockRequested only means a lock was asked for, so
+        // logging unconditionally here would print "Releasing lock held by
+        // X" even when lockPaths() itself failed (e.g. blocked by another
+        // owner with no --wait) and no lock was ever acquired.
         if (lockRequested) {
-          console.log(`🔓 Releasing lock held by "${lockOwner}"...`);
-          await unlockOwner(root, lockOwner).catch((err) => {
+          try {
+            const released = await unlockOwner(root, lockOwner);
+            if (released) {
+              console.log(`🔓 Released lock held by "${lockOwner}".`);
+            }
+          } catch (err) {
             console.error(`❌ Failed to release lock for "${lockOwner}". Run \`loop-worktree unlock --owner ${lockOwner}\` manually:`, err);
-          });
+          }
         }
 
         if (worktreeAbsPath) {
