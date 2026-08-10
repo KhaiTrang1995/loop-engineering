@@ -78,6 +78,7 @@ See [docs/area-owners.md](./docs/area-owners.md). Docs/examples/stories PRs are 
 - [ ] No secrets, tokens, or internal URLs
 - [ ] `STATE.md` examples use `.example` suffix (gitignored live state)
 - [ ] Safety-sensitive patterns reference [docs/safety.md](./docs/safety.md)
+- [ ] Windows setup adheres to [docs/QUICKSTART.md § Windows / CRLF notes](./docs/QUICKSTART.md#windows--crlf-notes)
 
 ## Code of Conduct
 
