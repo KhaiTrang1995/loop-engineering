@@ -356,6 +356,19 @@ npx @cobusgreyling/loop-swarm run --count 3 -- <agent-cmd>
 
 > **Limitations & Safety:** Runs are serialized sequentially to maintain safety guarantees on the manifest (~N× longer execution), shared stdio, and `SIGINT` signals exit the entire process. `loop-swarm` provides git worktree isolation rather than OS-level container isolation — see [docs/safety.md](./safety.md).
 
+### Windows / CRLF notes
+
+Windows contributors and loop operators should keep line-ending and process invocation differences in mind:
+
+* **Git line endings:** Recommended repository config is `git config core.autocrlf input` (or `false` with LF line endings) so checkouts and commits maintain clean LF line breaks across platforms.
+* **`loop-sync` frontmatter:** YAML frontmatter extraction in `STATE.md` and `LOOP.md` supports both LF and CRLF line endings ([#476](https://github.com/cobusgreyling/loop-engineering/pull/476)).
+* **`loop-sandbox` shims:** Windows `.cmd` executable shims (`npx`, `tsc`, etc.) that fail with `ENOENT` are automatically retried via shell execution, so manual `--shell` is rarely needed ([`tools/loop-sandbox/README.md`](../tools/loop-sandbox/README.md)).
+
+#### Troubleshooting
+
+* **If `loop-sync` reports drift unexpectedly on Windows:** Check for CRLF line breaks in `STATE.md` / `LOOP.md`. `loop-sync` strips carriage returns, but converting files to LF (`git config core.autocrlf input`) ensures multi-line matches match cleanly.
+* **If `loop-sandbox` fails with `ENOENT` spawning commands:** Ensure command binaries are in your PATH, or explicitly pass `--shell` if calling custom `.bat`/`.cmd` scripts.
+
 ## Copy-paste cheat sheet
 
 ```bash

@@ -9,6 +9,8 @@ Copy-pasteable loop patterns for Windsurf, using Cascade Workflows as the manual
 | CI Sweeper | 5m–15m (manual `/ci-sweeper`; external reminder optional) | Medium | [ci-sweeper.md](ci-sweeper.md) |
 | Issue Triage | 2h–1d (manual `/issue-triage`; external reminder optional) | Low | [issue-triage.md](issue-triage.md) |
 | Dependency Sweeper | 6h–1d (manual `/dependency-sweeper`; external reminder optional) | Medium | [dependency-sweeper.md](dependency-sweeper.md) |
+| Post-Merge Cleanup | 1d–6h (manual `/post-merge-cleanup`; external reminder optional) | Low | [post-merge-cleanup.md](post-merge-cleanup.md) |
+| Changelog Drafter | 1d or tag (manual `/changelog-drafter`; external reminder optional) | Low | [changelog-drafter.md](changelog-drafter.md) |
 
 No `loop-init --tool windsurf` yet — copy `SKILL.md` + `STATE.md` from any starter (e.g. `starters/minimal-loop`), then follow the example to wire a Cascade Workflow.
 
