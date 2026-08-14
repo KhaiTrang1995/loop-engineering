@@ -215,7 +215,22 @@ async function gitWorktreePaths(root) {
         if (!line.startsWith('worktree '))
             continue;
         const abs = line.slice('worktree '.length).trim();
-        const absReal = await realpath(abs);
+        let absReal;
+        try {
+            absReal = await realpath(abs);
+        }
+        catch (err) {
+            // git keeps listing a worktree (as "prunable") even after its directory
+            // was removed out-of-band -- a manual `rm -rf`, a crash mid-cleanup, a
+            // container wipe -- rather than via `git worktree remove`. realpath()
+            // on that now-missing path throws ENOENT, which used to propagate out
+            // of gc() entirely and abort the exact reconciliation it exists to do.
+            // Treat a missing directory as simply absent from disk so it still
+            // surfaces as a `dropped` manifest entry instead of crashing gc().
+            if (err.code === 'ENOENT')
+                continue;
+            throw err;
+        }
         const rel = path.relative(rootReal, absReal).split(path.sep).join('/');
         paths.push(rel);
     }
