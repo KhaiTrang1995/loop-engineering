@@ -49,3 +49,17 @@ test('recordDailySpend persists the state to disk', async () => {
   const parsed = JSON.parse(raw);
   assert.equal(parsed.tokensUsedToday, 700);
 });
+
+test('concurrent recordDailySpend calls for the same pattern do not lose an update', async () => {
+  const dir = await freshDir();
+  // Two overlapping invocations (e.g. two scheduled loops hitting the same
+  // pattern) must not both read the same stale total and clobber each
+  // other's write -- every delta has to land.
+  await Promise.all([
+    recordDailySpend(dir, 'ci-sweeper', 1000),
+    recordDailySpend(dir, 'ci-sweeper', 1000),
+  ]);
+  const raw = await readFile(path.join(dir, 'daily-spend.ci-sweeper.json'), 'utf8');
+  const parsed = JSON.parse(raw);
+  assert.equal(parsed.tokensUsedToday, 2000);
+});
