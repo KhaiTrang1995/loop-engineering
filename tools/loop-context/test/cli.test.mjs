@@ -10,6 +10,7 @@ import { resolveDailyBudgetFromPattern } from '../dist/budget-resolver.js';
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const cli = path.join(testDir, '../dist/cli.js');
 const onExceedCaptureScript = path.join(testDir, 'fixtures/on-exceed-capture.mjs');
+const onExceedIgnoreStdinScript = path.join(testDir, 'fixtures/on-exceed-ignore-stdin.mjs');
 
 async function freshDir() {
   return mkdtemp(path.join(tmpdir(), 'loop-context-cli-daily-'));
@@ -28,6 +29,9 @@ function runCli(args, input = stagnationLedger) {
   return spawnSync(process.execPath, [cli, ...args], {
     input,
     encoding: 'utf8',
+    // Default 1MB is too small once a decision's JSON echoes back a large
+    // error string (see the --on-exceed EPIPE regression test below).
+    maxBuffer: 20 * 1024 * 1024,
   });
 }
 
@@ -153,4 +157,32 @@ test('cli --on-exceed is not invoked when the run continues', async () => {
   );
   assert.equal(r.status, 0);
   await assert.rejects(() => readFile(outFile, 'utf8'));
+});
+
+test('cli --on-exceed does not crash when the hook script exits without reading stdin', async () => {
+  const dir = await freshDir();
+  const outFile = path.join(dir, 'ran.marker');
+
+  // A large first-line error survives errorSignature() unshortened, so the
+  // piped decision JSON is big enough to exceed the OS pipe buffer -- this
+  // makes the write-after-close failure (EPIPE on POSIX, EOF on Windows)
+  // land reliably instead of racing the hook process's own startup time.
+  const bigError = 'e'.repeat(5_000_000);
+  const bigLedger = JSON.stringify({
+    goal: 'x',
+    attempts: [
+      { iteration: 1, action: 'a', outcome: 'failure', error: bigError },
+      { iteration: 2, action: 'a', outcome: 'failure', error: bigError },
+      { iteration: 3, action: 'a', outcome: 'failure', error: bigError },
+    ],
+  });
+
+  const r = runCli(
+    ['--check', '--on-exceed', `node ${onExceedIgnoreStdinScript} ${outFile}`, '--json'],
+    bigLedger,
+  );
+
+  assert.equal(r.status, 2, `expected a clean escalation exit, not a crash. stderr: ${r.stderr}`);
+  assert.doesNotMatch(r.stderr, /Uncaught|EPIPE|EOF/);
+  assert.equal(await readFile(outFile, 'utf8'), 'ran');
 });
