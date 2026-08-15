@@ -39,10 +39,19 @@ export async function scanSkillDirectories(root: string): Promise<string[]> {
   const foundSet = new Set<string>();
   for (const dir of dirs) {
     if (!(await fileExists(dir))) continue;
-    const entries = await readdir(dir, { withFileTypes: true });
-    for (const e of entries) {
-      if (e.isDirectory()) foundSet.add(e.name);
-      if (e.isFile() && e.name === 'SKILL.md') foundSet.add('root-skill');
+    try {
+      const entries = await readdir(dir, { withFileTypes: true });
+      for (const e of entries) {
+        if (e.isDirectory()) foundSet.add(e.name);
+        if (e.isFile() && e.name === 'SKILL.md') foundSet.add('root-skill');
+      }
+    } catch {
+      // fileExists only proves the path existed at stat time -- it can still
+      // turn out to not be a directory (ENOTDIR), be unreadable (EPERM), or
+      // be removed between the two calls (ENOENT/TOCTOU). Any of those used
+      // to propagate out of this function uncaught, aborting the whole
+      // audit run in loop-audit/goal-audit instead of just skipping this one
+      // path. Matches tools/mcp-server/src/resolver.ts's listSkills().
     }
   }
   return [...foundSet];
