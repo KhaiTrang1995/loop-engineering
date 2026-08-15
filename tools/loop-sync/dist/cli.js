@@ -38,8 +38,13 @@ Usage:
   loop-sync [target-dir] [options]
 
 Options:
-  -a, --auto-fix    Attempt to auto-fix issues (experimental)
-  -d, --dry-run     Show what would be done without making changes
+  -a, --auto-fix    Scaffold missing STATE.md, gate.yaml, loop-budget.md, and
+                     loop-run-log.md with minimal defaults, and add a missing
+                     STATE.md reference to LOOP.md. LOOP.md and AGENTS.md are
+                     never fabricated -- their content is pattern-specific,
+                     so a missing one still just suggests loop-init.
+  -d, --dry-run     With --auto-fix, report what would be scaffolded/changed
+                     without writing anything
   -v, --verbose     Show detailed information
   --json            Output JSON format
   -h, --help        Show this help
@@ -48,6 +53,8 @@ Examples:
   loop-sync .
   loop-sync ./my-project -v
   loop-sync ./my-project --json
+  loop-sync ./my-project --auto-fix --dry-run
+  loop-sync ./my-project --auto-fix
 
 The tool checks:
   - STATE.md ↔ LOOP.md consistency
