@@ -7,7 +7,7 @@
  * 3. Missing required files
  * 4. Configuration drift from starters
  */
-import { readFile, access } from 'node:fs/promises';
+import { readFile, writeFile, access, mkdir } from 'node:fs/promises';
 import { readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 /**
@@ -111,6 +111,131 @@ function compareMarkdownFiles(file1Content, file2Content, threshold = 0.5) {
     return { similarity, differences };
 }
 /**
+ * Required files whose content is pattern-agnostic enough to scaffold a
+ * correct, minimal default without knowing which of loop-init's patterns
+ * (daily-triage, pr-babysitter, ci-sweeper, ...) the project actually uses.
+ * STATE.md, gate.yaml, loop-budget.md, and loop-run-log.md all have exactly
+ * this shape upstream (see templates/*.template) -- LOOP.md and AGENTS.md
+ * don't, since their content *is* the pattern-specific goal and workflow, so
+ * auto-fix intentionally leaves those two as report-only rather than
+ * fabricating wrong content.
+ *
+ * These are inlined rather than read from templates/*.template because
+ * loop-sync ships as a standalone npm package (files: ["dist"]) that runs
+ * against arbitrary target directories -- a path relative to this package's
+ * own install location wouldn't resolve once installed outside this
+ * monorepo checkout.
+ */
+const AUTO_FIXABLE_FILES = new Set(['STATE.md', 'gate.yaml', 'loop-budget.md', 'loop-run-log.md']);
+function projectNameFrom(targetDir) {
+    return path.basename(path.resolve(targetDir)) || 'this project';
+}
+function scaffoldContent(file, projectName) {
+    switch (file) {
+        case 'STATE.md':
+            return `# Loop State — ${projectName}
+
+Last run: (set by loop on each run)
+
+## High Priority (loop is acting or waiting on human)
+
+<!-- Format:
+- [ ] ID — one-line description
+  Loop action: what the loop did last
+  Human decision: (if any)
+-->
+
+## Watch List
+
+<!-- Items to monitor but not act on yet -->
+
+## Recent Noise (ignored this run)
+
+<!-- Brief list — helps tune triage skill -->
+
+---
+Run log: (timestamp) | findings | actions | escalations
+`;
+        case 'gate.yaml':
+            return `# Machine-readable twin of your project's safety policy. Adjust denylist
+# and autoMergeAllowlist for your project's own sensitive paths.
+version: 1
+
+denylist:
+  - ".env"
+  - ".env.*"
+  - "**/secrets/**"
+  - "**/credentials/**"
+  - "**/*_key*"
+  - "**/*_secret*"
+  - ".terraform/**"
+  - "k8s/production/**"
+  - "**/migrations/**"
+  - "auth/**"
+  - "payments/**"
+  - "billing/**"
+
+# Escalate instead of auto-merging when a change touches more than this many files.
+maxFiles: 10
+
+# --action auto-merge only proceeds if every changed path matches one of these.
+autoMergeAllowlist:
+  - "docs/**"
+  - "**/*.md"
+`;
+        case 'loop-budget.md':
+            return `# Loop Budget — ${projectName}
+
+## Daily limits
+
+| Loop | Max runs/day | Max tokens/day | Max sub-agent spawns/run |
+|------|--------------|----------------|--------------------------|
+| Daily Triage | 2 | 100k | 0 (L1) / 2 (L2) |
+| PR Babysitter | 288 | 2M | 3 |
+| CI Sweeper | 96 | 1M | 3 |
+| Dependency Sweeper | 4 | 500k | 3 |
+| Post-Merge Cleanup | 1 | 200k | 2 |
+
+## On budget exceed
+
+1. Pause all schedulers (\`scheduler_delete\` or disable automations)
+2. Append event to \`loop-run-log.md\`
+3. Notify human (Slack / issue / STATE.md High Priority)
+
+## Kill switch
+
+- Command or issue label: \`loop-pause-all\`
+- Resume only after human clears the flag in STATE.md
+`;
+        case 'loop-run-log.md':
+            return `# Loop Run Log — ${projectName}
+
+Append one entry per run. Prune entries older than 30 days.
+
+## Format
+
+\`\`\`json
+{
+  "run_id": "2026-06-09T08:15:00Z",
+  "pattern": "daily-triage",
+  "duration_s": 45,
+  "items_found": 4,
+  "actions_taken": 1,
+  "escalations": 0,
+  "tokens_estimate": 52000,
+  "outcome": "report-only | fix-proposed | escalated | no-op"
+}
+\`\`\`
+
+## Recent Runs
+
+<!-- Loop appends below this line -->
+`;
+        default:
+            throw new Error(`No auto-fix scaffold defined for ${file}.`);
+    }
+}
+/**
  * Scan skills directory for version information
  */
 async function scanSkillsDirectory(targetDir) {
@@ -165,12 +290,31 @@ export async function runSync(options) {
     for (const file of requiredFiles) {
         const filePath = path.join(targetDir, file);
         if (!await fileExists(filePath)) {
+            const fixable = AUTO_FIXABLE_FILES.has(file);
+            if (autoFix && fixable) {
+                if (!dryRun) {
+                    await mkdir(path.dirname(filePath), { recursive: true });
+                    await writeFile(filePath, scaffoldContent(file, projectNameFrom(targetDir)));
+                }
+                issues.push({
+                    type: 'missing',
+                    file,
+                    message: dryRun
+                        ? `${file} is missing — would scaffold a minimal default (--dry-run, no changes made)`
+                        : `${file} was missing — scaffolded a minimal default`,
+                    severity: 'info',
+                    suggestion: 'Review the generated content and adjust it for your project.',
+                });
+                continue;
+            }
             issues.push({
                 type: 'missing',
                 file,
                 message: `${file} is missing`,
                 severity: 'error',
-                suggestion: `Run 'npx @cobusgreyling/loop-init . --pattern daily-triage' to scaffold required files`,
+                suggestion: fixable
+                    ? `Run with --auto-fix to scaffold a minimal default, or 'npx @cobusgreyling/loop-init . --pattern daily-triage' for pattern-specific content`
+                    : `Run 'npx @cobusgreyling/loop-init . --pattern daily-triage' to scaffold required files`,
             });
         }
     }
@@ -187,13 +331,30 @@ export async function runSync(options) {
             const stateFiles = extractStateFiles(loopContent);
             // Check if STATE.md is referenced in LOOP.md
             if (!stateFiles.includes('STATE.md')) {
-                issues.push({
-                    type: 'inconsistent',
-                    file: 'LOOP.md',
-                    message: 'LOOP.md does not reference STATE.md',
-                    severity: 'warning',
-                    suggestion: 'Add STATE.md to the state files list in LOOP.md',
-                });
+                if (autoFix) {
+                    if (!dryRun) {
+                        const separator = /\n\n$/.test(loopContent) ? '' : loopContent.endsWith('\n') ? '\n' : '\n\n';
+                        await writeFile(loopPath, `${loopContent}${separator}Update STATE.md after each run.\n`);
+                    }
+                    issues.push({
+                        type: 'inconsistent',
+                        file: 'LOOP.md',
+                        message: dryRun
+                            ? 'LOOP.md does not reference STATE.md — would append a reference (--dry-run, no changes made)'
+                            : 'LOOP.md did not reference STATE.md — appended a reference',
+                        severity: 'info',
+                        suggestion: 'Review the appended line and reword it if you prefer.',
+                    });
+                }
+                else {
+                    issues.push({
+                        type: 'inconsistent',
+                        file: 'LOOP.md',
+                        message: 'LOOP.md does not reference STATE.md',
+                        severity: 'warning',
+                        suggestion: 'Add STATE.md to the state files list in LOOP.md, or run with --auto-fix',
+                    });
+                }
             }
             // Compare structural similarity
             const { similarity, differences } = compareMarkdownFiles(stateContent, loopContent, 0.5);
