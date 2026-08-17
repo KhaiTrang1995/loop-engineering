@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { access } from 'node:fs/promises';
 
@@ -73,6 +73,34 @@ test('loop status --json includes recentRuns array', async () => {
   assert.ok(Array.isArray(report.recentRuns));
   assert.ok(report.stateFile === 'STATE.md' || report.stateFile === null);
   assert.equal(typeof report.nextHint, 'string');
+});
+
+test('loop --interactive with closed (non-TTY) stdin prints help instead of scaffolding', async () => {
+  const { mkdtemp, rm, readdir } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const dir = await mkdtemp(path.join(tmpdir(), 'loop-interactive-nontty-'));
+  try {
+    // execFileSync's input: '' pipes an empty stdin and closes it, the same
+    // shape as `loop --interactive < /dev/null` in CI -- readline's
+    // question() resolves immediately with '' instead of waiting on a
+    // human. Before the TTY guard, this ran the wizard's default plan
+    // (loop init . --pattern daily-triage --tool grok) against cwd.
+    const stdout = execFileSync(process.execPath, [CLI, '--interactive'], {
+      cwd: dir,
+      input: '',
+      encoding: 'utf8',
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    assert.match(stdout, /Week-one path/);
+    // "→ loop init" only appears when executePlan() actually runs init;
+    // printNonInteractiveHelp()'s own copy-paste suggestions don't use the arrow.
+    assert.doesNotMatch(stdout, /→ loop init/);
+
+    const entries = await readdir(dir);
+    assert.deepEqual(entries, [], 'must not scaffold files from a non-TTY --interactive run');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('loop doctor on empty temp dir is blocked', async () => {
