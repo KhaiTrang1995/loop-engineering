@@ -7,6 +7,15 @@ import { readFile, writeFile } from 'node:fs/promises';
 
 const MARKER = '<!-- Loop appends below this line -->';
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+// Only strings shaped like an ISO date are treated as timestamps for pruning.
+// `new Date(...)` is a lenient parser: a non-ISO run_id (a numeric GitHub run
+// id, a custom slug like "run-1") doesn't reliably yield NaN, it can parse
+// into a spurious in-range-looking date instead (e.g. "run-1" -> 2001-01-01),
+// which would then read as "older than 30 days" and get silently pruned even
+// though the entry was just written. Gate the parse on this pattern first so
+// non-ISO run_ids are always kept, matching loop-metrics' handling of the
+// same run_id shapes.
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}/;
 
 const entryJson = process.argv[2];
 const logPath = process.argv[3] || 'loop-run-log.md';
@@ -40,8 +49,8 @@ for (const line of after.split('\n')) {
   if (!trimmed.startsWith('{')) continue;
   try {
     const obj = JSON.parse(trimmed);
-    const t = new Date(obj.run_id).getTime();
-    if (!Number.isNaN(t) && now - t <= MAX_AGE_MS) {
+    const t = ISO_DATE_RE.test(obj.run_id) ? new Date(obj.run_id).getTime() : NaN;
+    if (Number.isNaN(t) || now - t <= MAX_AGE_MS) {
       kept.push(trimmed);
     }
   } catch {

@@ -74,3 +74,21 @@ test('scanSkillDirectories finds skills in target directory', async () => {
 
   await fs.rm(fixtureDir, { recursive: true, force: true });
 });
+
+test('scanSkillDirectories skips a skills path that is not a directory instead of throwing', async () => {
+  // fileExists() only proves the path existed at stat() time -- it doesn't
+  // prove readdir() will succeed on it. A `skills` path that's actually a
+  // file (renamed, a broken checkout, a stray artifact) used to crash the
+  // whole scan with an uncaught ENOTDIR, aborting the entire audit run in
+  // loop-audit/goal-audit instead of just skipping this one path.
+  const fixtureDir = path.join(process.cwd(), '.test-fixture-not-a-dir');
+  await fs.rm(fixtureDir, { recursive: true, force: true });
+  await fs.mkdir(path.join(fixtureDir, '.claude'), { recursive: true });
+  await fs.writeFile(path.join(fixtureDir, '.claude', 'skills'), 'not actually a directory');
+  await fs.mkdir(path.join(fixtureDir, 'skills', 'bar'), { recursive: true });
+
+  const skills = await scanSkillDirectories(fixtureDir);
+  assert.ok(skills.includes('bar'), 'A valid skills dir is still scanned despite a broken sibling path');
+
+  await fs.rm(fixtureDir, { recursive: true, force: true });
+});

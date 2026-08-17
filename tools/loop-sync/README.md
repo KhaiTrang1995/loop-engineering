@@ -31,8 +31,8 @@ loop-sync [target-dir] [options]
 
 | Option | Description |
 |--------|-------------|
-| `-a, --auto-fix` | Attempt to auto-fix issues (experimental) |
-| `-d, --dry-run` | Show what would be done without making changes |
+| `-a, --auto-fix` | Scaffold missing STATE.md, gate.yaml, loop-budget.md, and loop-run-log.md with minimal defaults, and add a missing STATE.md reference to LOOP.md. LOOP.md and AGENTS.md are never fabricated — run `loop-init` for those. |
+| `-d, --dry-run` | With `--auto-fix`, report what would be scaffolded/changed without writing anything |
 | `-v, --verbose` | Show detailed information |
 | `--json` | Output JSON format |
 | `-h, --help` | Show help |
@@ -48,6 +48,12 @@ loop-sync ./my-project -v
 
 # JSON output for scripting
 loop-sync ./my-project --json
+
+# Preview what --auto-fix would scaffold/change, without writing anything
+loop-sync ./my-project --auto-fix --dry-run
+
+# Scaffold the safely-fixable files and fix the LOOP.md/STATE.md reference
+loop-sync ./my-project --auto-fix
 ```
 
 ## What it checks

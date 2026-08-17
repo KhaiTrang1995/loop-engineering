@@ -1,7 +1,7 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdir, writeFile, rm, readFile, access } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { runSync, formatReport, extractFrontmatter } from '../dist/sync.js';
@@ -82,6 +82,67 @@ describe('runSync', () => {
     assert.ok(report.suggestions.length > 0);
   });
 });
+
+describe('runSync auto-fix', () => {
+  const fixDir = path.join(process.cwd(), '.test-tmp-autofix');
+
+  beforeEach(() => mkdir(fixDir, { recursive: true }));
+  afterEach(() => rm(fixDir, { recursive: true, force: true }));
+
+  test('scaffolds STATE.md, gate.yaml, loop-budget.md, and loop-run-log.md when missing', async () => {
+    const report = await runSync({ targetDir: fixDir, autoFix: true, dryRun: false, verbose: false });
+
+    for (const file of ['STATE.md', 'gate.yaml', 'loop-budget.md', 'loop-run-log.md']) {
+      const content = await readFile(path.join(fixDir, file), 'utf8');
+      assert.ok(content.length > 0, `${file} should have been scaffolded with content`);
+      const issue = report.issues.find((i) => i.file === file);
+      assert.equal(issue.severity, 'info');
+      assert.match(issue.message, /scaffolded/i);
+    }
+    // loop-run-log.md must keep the marker append-run-log.mjs depends on.
+    const runLog = await readFile(path.join(fixDir, 'loop-run-log.md'), 'utf8');
+    assert.match(runLog, /<!-- Loop appends below this line -->/);
+  });
+
+  test('does not fabricate LOOP.md or AGENTS.md -- still reported as missing', async () => {
+    const report = await runSync({ targetDir: fixDir, autoFix: true, dryRun: false, verbose: false });
+
+    assert.equal(await fileExists(path.join(fixDir, 'LOOP.md')), false);
+    assert.equal(await fileExists(path.join(fixDir, 'AGENTS.md')), false);
+    const loopIssue = report.issues.find((i) => i.file === 'LOOP.md');
+    assert.equal(loopIssue.severity, 'error');
+    assert.match(loopIssue.suggestion, /loop-init/);
+  });
+
+  test('--dry-run with --auto-fix reports without writing anything', async () => {
+    const report = await runSync({ targetDir: fixDir, autoFix: true, dryRun: true, verbose: false });
+
+    assert.equal(await fileExists(path.join(fixDir, 'STATE.md')), false);
+    const issue = report.issues.find((i) => i.file === 'STATE.md');
+    assert.match(issue.message, /would scaffold/i);
+    assert.match(issue.message, /dry-run/i);
+  });
+
+  test('appends a STATE.md reference to LOOP.md when missing', async () => {
+    await writeFile(path.join(fixDir, 'STATE.md'), '# Loop State\n');
+    await writeFile(
+      path.join(fixDir, 'LOOP.md'),
+      `# Loop Configuration\n\n## Patterns\n- daily-triage\n`,
+    );
+
+    const report = await runSync({ targetDir: fixDir, autoFix: true, dryRun: false, verbose: false });
+
+    const loopContent = await readFile(path.join(fixDir, 'LOOP.md'), 'utf8');
+    assert.match(loopContent, /Update STATE\.md after each run\./);
+    const issue = report.issues.find((i) => i.file === 'LOOP.md' && i.type === 'inconsistent');
+    assert.equal(issue.severity, 'info');
+    assert.match(issue.message, /appended a reference/i);
+  });
+});
+
+function fileExists(p) {
+  return access(p).then(() => true, () => false);
+}
 
 describe('formatReport', () => {
   test('formats healthy report', () => {
