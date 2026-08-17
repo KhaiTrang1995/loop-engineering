@@ -167,6 +167,24 @@ test('gc drops manifest entries whose worktree was removed out of band', async (
   }
 });
 
+test('gc does not crash when a worktree directory was deleted without git worktree remove', async () => {
+  const dir = await initRepo();
+  try {
+    await createWorktree({ root: dir, runId: 'wiped', pattern: 'ci-sweeper' });
+    // Simulate a manual `rm -rf` / crash mid-cleanup / container wipe: the
+    // directory is gone but git still lists it (as "prunable") since it was
+    // never told via `git worktree remove`.
+    await rm(path.join(dir, '.loop-worktrees', 'wiped'), { recursive: true, force: true });
+
+    const result = await gc({ root: dir });
+    assert.deepEqual(result.dropped.map((e) => e.id), ['wiped']);
+    const manifest = await readManifest(dir);
+    assert.equal(manifest.worktrees.length, 0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('cleanup honors --older-than', async () => {
   const dir = await initRepo();
   try {
