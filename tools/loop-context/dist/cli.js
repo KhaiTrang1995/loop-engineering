@@ -276,6 +276,14 @@ function runOnExceedHook(script, decision) {
             resolve();
         });
         child.on('close', () => resolve());
+        // The hook script may exit without ever reading stdin (e.g. a notify
+        // script that ignores its input). Writing to that already-closed pipe
+        // then raises an 'error' event (EPIPE on POSIX, EOF on Windows) on the
+        // stream itself; left unhandled, Node treats that as an uncaught
+        // exception and crashes the whole process. This hook is documented as
+        // fire-and-forget, so a write failure here must not escalate past the
+        // 'close' handler above, which resolves regardless.
+        child.stdin.on('error', () => { });
         child.stdin.write(JSON.stringify(decision));
         child.stdin.end();
     });
