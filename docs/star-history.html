@@ -234,7 +234,7 @@ title: Star History — Loop Engineering
     const timestamps = [];
     let page = 1;
     while (true) {
-      const url = `https://api.github.com/repos/${owner}/${repo}/stargazers?per_page=100&page=${page}`;
+      const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/stargazers?per_page=100&page=${page}`;
       const res = await fetch(url, {
         headers: {
           Accept: 'application/vnd.github.v3.star+json',
