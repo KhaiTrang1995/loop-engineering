@@ -153,6 +153,17 @@ async function main(): Promise<void> {
     return;
   }
   if (cmd === '--interactive' || cmd === '-i') {
+    // Mirrors cmdWizard()'s TTY gate below: runInteractiveWizard() drives
+    // readline.question(), which resolves immediately with '' when stdin
+    // isn't a TTY (a CI step, piped input, `< /dev/null`) instead of
+    // waiting for a human. Without this guard, loop --interactive in a
+    // non-interactive context silently ran the wizard with every prompt
+    // answered blank and scaffolded files nobody asked for.
+    if (!process.stdin.isTTY) {
+      printNonInteractiveHelp();
+      process.exitCode = 0;
+      return;
+    }
     const plan = await runInteractiveWizard();
     process.exitCode = await executePlan(plan);
     return;
