@@ -77,16 +77,26 @@ export function aggregateMetrics(entries: RunEntry[]): MetricsDashboard {
   let totalDurationS = 0;
   let totalActionsTaken = 0;
   let totalEscalations = 0;
+  let runsWithoutEscalation = 0;
 
   for (const entry of entries) {
     totalTokens += entry.tokens_estimate || 0;
     totalDurationS += entry.duration_s || 0;
     totalActionsTaken += entry.actions_taken || 0;
     totalEscalations += entry.escalations || 0;
+    if (!entry.escalations) runsWithoutEscalation++;
   }
 
   const totalRuns = entries.length;
-  const successRatePct = totalRuns > 0 ? ((totalRuns - totalEscalations) / totalRuns) * 100 : 0;
+  // totalEscalations is a sum of each run's escalation *count* (a run can
+  // log more than one, e.g. several items escalated in one triage pass) --
+  // subtracting it from totalRuns (a count of runs) conflates events with
+  // runs and can go negative for a real, ordinary run log (this repo's own
+  // loop-run-log.md has entries with escalations: 4 and escalations: 5).
+  // Success rate is "what fraction of runs didn't escalate at all", which
+  // stays correctly bounded to [0, 100] regardless of how many escalations
+  // any single run logged.
+  const successRatePct = totalRuns > 0 ? (runsWithoutEscalation / totalRuns) * 100 : 0;
   const avgDurationS = totalRuns > 0 ? totalDurationS / totalRuns : 0;
 
   // Simple heuristic: Each successful action is worth +10, each escalation is -5.
