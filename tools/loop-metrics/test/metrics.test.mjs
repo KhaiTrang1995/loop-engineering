@@ -17,6 +17,24 @@ test('loop-metrics filters and aggregates', () => {
   assert.strictEqual(metrics.totalActionsTaken, 3);
   assert.strictEqual(metrics.totalEscalations, 1);
   assert.strictEqual(metrics.roiScore, (3 * 10) - (1 * 5)); // 25
+  assert.strictEqual(metrics.successRatePct, 50); // 1 of 2 runs had no escalation
+});
+
+test('successRatePct stays within [0, 100] when a single run logs more than one escalation', () => {
+  // A run can escalate several items in one pass (this repo's own
+  // loop-run-log.md has real entries with escalations: 4 and 5), so
+  // totalEscalations (a sum of per-run counts) can exceed totalRuns.
+  // successRatePct must still reflect "runs that didn't escalate", not go
+  // negative from subtracting an event count as if it were a run count.
+  const entries = [
+    { run_id: 'a', pattern: 'ci-sweeper', duration_s: 1, items_found: 5, actions_taken: 1, escalations: 5, tokens_estimate: 1000, outcome: 'escalated' },
+    { run_id: 'b', pattern: 'ci-sweeper', duration_s: 1, items_found: 0, actions_taken: 0, escalations: 0, tokens_estimate: 1000, outcome: 'report-only' },
+  ];
+
+  const metrics = aggregateMetrics(entries);
+  assert.strictEqual(metrics.totalEscalations, 5);
+  assert.strictEqual(metrics.successRatePct, 50); // 1 of 2 runs had no escalation
+  assert.ok(metrics.successRatePct >= 0 && metrics.successRatePct <= 100);
 });
 
 test('filterEntries keeps entries with unparseable run_id when a timeframe is set', () => {
