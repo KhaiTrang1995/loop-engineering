@@ -152,8 +152,8 @@ const GATE_YAML_TEMPLATE = `# Machine-readable twin of docs/safety.md, enforced 
 version: 1
 
 denylist:
-  - ".env"
-  - ".env.*"
+  - "**/.env"
+  - "**/.env.*"
   - "**/secrets/**"
   - "**/credentials/**"
   - "**/*_key*"

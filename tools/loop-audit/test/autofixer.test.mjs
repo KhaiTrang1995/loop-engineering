@@ -46,6 +46,21 @@ test('autoFixProject writes a gate.yaml that loop-gate can actually load', async
     assert.match(written, /version:\s*1/);
     assert.match(written, /denylist:/);
     assert.doesNotMatch(written, /^gates:/m);
+
+    // A bare pattern like ".env" only matches a path exactly equal to
+    // ".env" under minimatch -- it silently misses "services/api/.env".
+    // Every denylist entry here must be **/-anchored (or already contain
+    // its own ** segment) so it also catches the nested case, which is
+    // what "never auto-edit these" in docs/safety.md actually means.
+    const denylistBlock = written.match(/denylist:\n((?:\s+-\s+.+\n)+)/)?.[1] ?? '';
+    const entries = [...denylistBlock.matchAll(/-\s+"([^"]+)"/g)].map((m) => m[1]);
+    assert.ok(entries.length > 0, 'expected at least one denylist entry to check');
+    for (const entry of entries) {
+      assert.ok(
+        entry.startsWith('**/') || entry.includes('**'),
+        `denylist entry "${entry}" is not anchored and would miss a nested match`,
+      );
+    }
   } finally {
     await rm(root, { recursive: true, force: true }).catch(() => {});
   }

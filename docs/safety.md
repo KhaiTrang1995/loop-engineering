@@ -7,18 +7,18 @@ Loops amplify judgment — good and bad. These guardrails are minimum bar for pr
 The loop must **never** auto-edit these without human approval:
 
 ```
-.env
-.env.*
+**/.env
+**/.env.*
 **/secrets/**
 **/credentials/**
 **/*_key*
 **/*_secret*
-.terraform/**
-k8s/production/**
+**/.terraform/**
+**/k8s/production/**
 **/migrations/**          # unless explicit migration loop
-auth/**
-payments/**
-billing/**
+**/auth/**
+**/payments/**
+**/billing/**
 ```
 
 Encode in `minimal-fix` and implementer skills:
