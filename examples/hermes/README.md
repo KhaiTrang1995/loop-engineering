@@ -8,6 +8,7 @@
 | [pr-babysitter.md](./pr-babysitter.md) | PR Babysitter (L1 report → L2 worktree + verifier) |
 | [ci-sweeper.md](./ci-sweeper.md) | CI Sweeper (L1 report → L2 worktree + verifier) |
 | [issue-triage.md](./issue-triage.md) | Issue Triage (L1 propose-only → L2 allowlisted labels) |
+| [loop-verifier.md](./loop-verifier.md) | Loop Verifier (L2 — independent maker/checker split via `delegate_task`) |
 
 Optional **channel delivery** (Telegram, Slack, Discord, WhatsApp, SMS, Feishu) is Hermes's differentiator — the same cron job can post its summary into any connected home channel.
 
