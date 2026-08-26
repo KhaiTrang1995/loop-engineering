@@ -284,8 +284,15 @@ server.tool('loop_estimate_cost', 'Estimate daily token cost for a pattern at a 
     try {
         result = estimateCost({ pattern, level, cadence });
     }
-    catch {
-        return { content: [{ type: 'text', text: `Invalid cadence: ${cadence ?? pattern.cadence}` }] };
+    catch (err) {
+        // estimateCost() can fail for reasons that have nothing to do with
+        // cadence -- e.g. a registry.yaml entry with a missing/malformed
+        // `cost` block throws a TypeError reading its fields. Hardcoding
+        // "Invalid cadence" here regardless of the actual failure misled
+        // whoever was debugging a broken registry entry. Surface the real
+        // message instead.
+        const message = err instanceof Error ? err.message : String(err);
+        return { content: [{ type: 'text', text: `Cost estimate failed: ${message}` }] };
     }
     const fmt = (n) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${Math.round(n / 1_000)}k` : String(n);
     const { scenarios, suggestedDailyCap } = result;
