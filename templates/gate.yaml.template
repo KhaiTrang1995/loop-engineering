@@ -5,18 +5,18 @@
 version: 1
 
 denylist:
-  - ".env"
-  - ".env.*"
+  - "**/.env"
+  - "**/.env.*"
   - "**/secrets/**"
   - "**/credentials/**"
   - "**/*_key*"
   - "**/*_secret*"
-  - ".terraform/**"
-  - "k8s/production/**"
+  - "**/.terraform/**"
+  - "**/k8s/production/**"
   - "**/migrations/**"
-  - "auth/**"
-  - "payments/**"
-  - "billing/**"
+  - "**/auth/**"
+  - "**/payments/**"
+  - "**/billing/**"
 
 # Escalate instead of auto-merging when a change touches more than this many files.
 maxFiles: 10

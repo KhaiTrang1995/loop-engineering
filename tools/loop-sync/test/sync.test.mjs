@@ -102,6 +102,22 @@ describe('runSync auto-fix', () => {
     // loop-run-log.md must keep the marker append-run-log.mjs depends on.
     const runLog = await readFile(path.join(fixDir, 'loop-run-log.md'), 'utf8');
     assert.match(runLog, /<!-- Loop appends below this line -->/);
+
+    // A bare pattern like ".env" only matches a path exactly equal to
+    // ".env" under minimatch (tools/loop-gate's matcher) -- it silently
+    // misses "services/api/.env". Every denylist entry must be
+    // **/-anchored (or already contain its own ** segment) so the
+    // scaffolded policy actually catches a nested match too.
+    const gateYaml = await readFile(path.join(fixDir, 'gate.yaml'), 'utf8');
+    const denylistBlock = gateYaml.match(/denylist:\n((?:\s+-\s+.+\n)+)/)?.[1] ?? '';
+    const entries = [...denylistBlock.matchAll(/-\s+"([^"]+)"/g)].map((m) => m[1]);
+    assert.ok(entries.length > 0, 'expected at least one denylist entry to check');
+    for (const entry of entries) {
+      assert.ok(
+        entry.startsWith('**/') || entry.includes('**'),
+        `denylist entry "${entry}" is not anchored and would miss a nested match`,
+      );
+    }
   });
 
   test('does not fabricate LOOP.md or AGENTS.md -- still reported as missing', async () => {

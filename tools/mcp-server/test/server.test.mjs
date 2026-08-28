@@ -460,6 +460,59 @@ test('loop_estimate_cost accounts for early_exit_required instead of a flat mix'
   }
 });
 
+test('loop_estimate_cost surfaces the real error for a bad cadence override', async () => {
+  const root = await setup();
+  try {
+    const res = await callServer(root, [{
+      id: 1, method: 'tools/call',
+      params: { name: 'loop_estimate_cost', arguments: { patternId: 'daily-triage', level: 'L2', cadence: 'not-a-cadence' } },
+    }]);
+    const text = res.get(1).result.content[0].text;
+    // Propagates loop-cost's own message (e.g. "Invalid cadence interval:
+    // not") instead of a hardcoded guess.
+    assert.match(text, /Invalid cadence/i);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('loop_estimate_cost does not mislabel a broken registry entry as an invalid cadence', async () => {
+  // A pattern missing its `cost` block throws a TypeError inside
+  // estimateCost() that has nothing to do with cadence -- the catch-all
+  // used to always report "Invalid cadence" regardless of the real cause.
+  const brokenRoot = await mkdtemp(path.join(tmpdir(), 'mcp-test-broken-registry-'));
+  try {
+    await mkdir(path.join(brokenRoot, 'patterns'), { recursive: true });
+    await writeFile(
+      path.join(brokenRoot, 'patterns', 'registry.yaml'),
+      `patterns:
+  - id: no-cost-block
+    name: No Cost Block
+    file: no-cost-block.md
+    goal: Missing its cost block
+    cadence: 1d
+    risk: low
+    tools: [grok]
+    skills: []
+    state: STATE.md
+    phases: [report]
+    human_gates: []
+    starter: starters/minimal-loop
+    week_one_mode: L1
+    token_cost: low
+`,
+    );
+    const res = await callServer(brokenRoot, [{
+      id: 1, method: 'tools/call',
+      params: { name: 'loop_estimate_cost', arguments: { patternId: 'no-cost-block', level: 'L2' } },
+    }]);
+    const text = res.get(1).result.content[0].text;
+    assert.ok(!text.includes('Invalid cadence'), `should not blame cadence for a missing cost block: ${text}`);
+  } finally {
+    await rm(brokenRoot, { recursive: true, force: true });
+  }
+});
+
 test('pattern resource is readable over stdio', async () => {
   const root = await setup();
   try {

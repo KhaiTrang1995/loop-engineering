@@ -3,8 +3,12 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { checkGate, loadGateConfig, assertValidAction } from '../dist/gate.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REPO_GATE_YAML = path.resolve(__dirname, '../../../gate.yaml');
 
 const baseConfig = {
   version: 1,
@@ -142,4 +146,27 @@ test('loadGateConfig rejects a config missing required fields', async () => {
 test('loadGateConfig rejects the wrong version', async () => {
   const file = await freshGateFile('version: 2\ndenylist: []\n');
   await assert.rejects(() => loadGateConfig(file), /Invalid gate config/);
+});
+
+// Dogfoods the actual policy this repo ships at gate.yaml, not just the
+// matching mechanism -- a bare (unanchored) pattern like ".env" or "auth/**"
+// only matches that exact root-level path and silently misses the same
+// file/dir nested anywhere else, which a schema-validity check alone would
+// never catch.
+test("this repo's own gate.yaml denylist catches sensitive paths nested in a subdirectory, not just at repo root", async () => {
+  const config = await loadGateConfig(REPO_GATE_YAML);
+  const nestedSensitivePaths = [
+    'services/api/.env',
+    'services/api/.env.production',
+    'infra/.terraform/state.tfstate',
+    'apps/backend/k8s/production/deploy.yaml',
+    'apps/backend/auth/session.ts',
+    'apps/checkout/payments/charge.ts',
+    'apps/checkout/billing/invoice.ts',
+  ];
+  for (const p of nestedSensitivePaths) {
+    const decision = checkGate({ config, action: 'commit', paths: [p] });
+    assert.equal(decision.allowed, false, `${p} should be denylisted, got: ${decision.reason}`);
+    assert.equal(decision.trigger, 'denylist');
+  }
 });
