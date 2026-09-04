@@ -16,6 +16,7 @@ const PATTERN_STARTERS = {
     'post-merge-cleanup': 'post-merge-cleanup',
     'changelog-drafter': 'changelog-drafter',
     'issue-triage': 'issue-triage',
+    'thin-loop': 'thin-loop',
 };
 const TOOL_SUFFIX = {
     grok: '',
@@ -23,6 +24,8 @@ const TOOL_SUFFIX = {
     codex: '-codex',
     opencode: '-opencode',
 };
+/** Patterns with a single tool-agnostic starter (no -claude / -codex suffix). */
+const TOOL_AGNOSTIC = new Set(['thin-loop']);
 const L2_PATTERNS = new Set(['ci-sweeper', 'dependency-sweeper']);
 const PATTERNS_NEEDING_FIX = new Set([
     'pr-babysitter',
@@ -44,6 +47,7 @@ const STATE_FILES = {
     'post-merge-cleanup': 'post-merge-state.md',
     'changelog-drafter': 'changelog-drafter-state.md',
     'issue-triage': 'issue-triage-state.md',
+    'thin-loop': 'STATE.md',
 };
 /** Mirrors patterns/registry.yaml cost caps — used when scaffolding observability files. */
 const PATTERN_BUDGET = {
@@ -54,6 +58,7 @@ const PATTERN_BUDGET = {
     'post-merge-cleanup': { name: 'Post-Merge Cleanup', maxRunsPerDay: 1, dailyCap: 200_000, maxSpawnsL1: 0, maxSpawnsL2: 2 },
     'changelog-drafter': { name: 'Changelog Drafter', maxRunsPerDay: 1, dailyCap: 100_000, maxSpawnsL1: 0, maxSpawnsL2: 2 },
     'issue-triage': { name: 'Issue Triage', maxRunsPerDay: 12, dailyCap: 80_000, maxSpawnsL1: 0, maxSpawnsL2: 1 },
+    'thin-loop': { name: 'Thin Loop', maxRunsPerDay: 24, dailyCap: 20_000, maxSpawnsL1: 0, maxSpawnsL2: 0 },
 };
 /** Map LE patterns → harness-foundry stack presets (report-only → minimal, fix → implementer). */
 const PATTERN_FOUNDRY_PRESET = {
@@ -64,6 +69,7 @@ const PATTERN_FOUNDRY_PRESET = {
     'ci-sweeper': 'implementer',
     'dependency-sweeper': 'implementer',
     'post-merge-cleanup': 'implementer',
+    'thin-loop': 'minimal',
 };
 const FOUNDRY_SHOWCASE = 'https://github.com/cobusgreyling/harness-foundry/blob/main/docs/showcase.md';
 const MINIMAX_DEFAULT_MODEL = 'MiniMax-M3';
@@ -100,6 +106,60 @@ const MINIMAX_REGIONS = [
 ];
 const MINIMAX_MODEL_IDS = MINIMAX_MODELS.map((m) => m.id);
 const MINIMAX_REGION_IDS = MINIMAX_REGIONS.map((r) => r.region);
+const ORCAROUTER_DEFAULT_MODEL = 'orcarouter/fusion';
+const ORCAROUTER_BASE_URL = 'https://api.orcarouter.ai';
+const ORCAROUTER_MODELS = [
+    {
+        id: 'orcarouter/fusion',
+        contextWindow: 1_000_000,
+        thinking: ['adaptive', 'disabled'],
+        notes: 'Adaptive-routing flagship; multi-model aggregate with automatic failover',
+    },
+    {
+        id: 'orcarouter/fusion-flash',
+        contextWindow: 200_000,
+        thinking: ['adaptive', 'disabled'],
+        notes: 'Fast adaptive-routing tier for high-volume, latency-sensitive loops',
+    },
+    {
+        id: 'orcarouter/auto',
+        contextWindow: 1_000_000,
+        thinking: ['adaptive', 'disabled'],
+        notes: 'Cost-optimized routing tier',
+    },
+    {
+        id: 'orcarouter/free',
+        contextWindow: 200_000,
+        thinking: ['disabled'],
+        notes: 'Zero-cost tier for report-only loops',
+    },
+];
+const ORCAROUTER_MODEL_IDS = ORCAROUTER_MODELS.map((m) => m.id);
+/**
+ * Render the `model/orcarouter` interface primitive for the implementer stack.
+ * OrcaRouter exposes an OpenAI-compatible gateway that routes a single model
+ * id across many upstream models. Both protocol shapes live on the same
+ * gateway base URL — the OpenAI and Anthropic-compatible paths are identical
+ * and the client picks the wire format via its request headers.
+ */
+function orcarouterInterfaceYaml(model) {
+    const models = ORCAROUTER_MODELS.map((m) => [
+        `          - id: ${m.id}`,
+        `            context_window: ${m.contextWindow}`,
+        `            thinking: [${m.thinking.join(', ')}]`,
+        `            notes: "${m.notes}"`,
+    ].join('\n')).join('\n');
+    return `    - primitive: model/orcarouter
+      config:
+        model: ${model}
+        models:
+${models}
+        endpoints:
+          global:
+            openai_base_url: ${ORCAROUTER_BASE_URL}/v1
+            anthropic_base_url: ${ORCAROUTER_BASE_URL}/v1
+            docs_root: https://www.orcarouter.ai`;
+}
 /** Render the `model/minimax` interface primitive for the implementer stack. */
 function minimaxInterfaceYaml(model, region) {
     const models = MINIMAX_MODELS.map((m) => [
@@ -130,7 +190,7 @@ ${endpoints}`;
 }
 function parseArgs(argv) {
     let pattern = 'daily-triage';
-    let tool = 'grok';
+    let tool = 'claude';
     let target = '.';
     let dryRun = false;
     let withFoundry = false;
@@ -170,9 +230,11 @@ function foundryStackYaml(stackName, pattern, preset, provider = 'anthropic', re
     if (preset === 'implementer') {
         const interfaceLayer = provider === 'minimax'
             ? minimaxInterfaceYaml(model, region)
-            : `    - primitive: model/anthropic
+            : provider === 'orcarouter'
+                ? orcarouterInterfaceYaml(model)
+                : `    - primitive: model/anthropic
       config:
-        model: claude-sonnet-4-20250514`;
+        model: claude-sonnet-4-6`;
         return `name: ${stackName}
 version: 1.0.0
 description: "loop-engineering ${pattern} → implementer harness (loop-init --with-foundry)"
@@ -295,51 +357,27 @@ async function scaffoldMemory(targetDir, templatesRoot, dryRun) {
     }
 }
 function printFoundryCta(opts) {
-    const { pattern, tool, withFoundry, score, preset } = opts;
+    const { pattern, withFoundry, preset } = opts;
+    if (!withFoundry)
+        return;
     const mapped = preset ?? PATTERN_FOUNDRY_PRESET[pattern];
     console.log('');
-    if (withFoundry) {
-        console.log(`Harness stack ready (.foundry/, preset: ${mapped} for ${pattern})`);
-        console.log('  npx @cobusgreyling/harness-foundry validate');
-        console.log('  npx @cobusgreyling/harness-foundry run --goal "Verify harness wiring"');
-        console.log(`  Showcase: ${FOUNDRY_SHOWCASE}`);
-        return;
-    }
-    const highReady = score !== null && score >= 80;
-    console.log(highReady
-        ? 'Next after Loop Ready 80+: version this loop as a harness'
-        : 'Optional: make this loop a versioned harness (harness-foundry)');
-    console.log(`  npx @cobusgreyling/loop-init . --pattern ${pattern} --tool ${tool} --with-foundry`);
-    console.log(`  # or: npx @cobusgreyling/harness-foundry init --from loop-engineering:${pattern}`);
-    if (highReady) {
-        console.log(`  Showcase: ${FOUNDRY_SHOWCASE}`);
-    }
+    console.log(`Harness stack ready (.foundry/, preset: ${mapped} for ${pattern})`);
+    console.log('  npx @cobusgreyling/harness-foundry validate');
+    console.log('  npx @cobusgreyling/harness-foundry run --goal "Verify harness wiring"');
+    console.log(`  Showcase: ${FOUNDRY_SHOWCASE}`);
 }
 function printFleetCta(opts) {
-    const { pattern, tool, withFleet, score } = opts;
-    console.log('');
-    if (withFleet) {
-        console.log('Fleet engineering stack ready (fleet-registry.md, fleet-inbox.md)');
+    if (!opts.withFleet)
         return;
-    }
-    const highReady = score !== null && score >= 80;
-    console.log(highReady
-        ? 'Next after Loop Ready 80+: version this loop for a fleet (fleet-engineering)'
-        : 'Optional: add fleet-engineering for multi-agent populations');
-    console.log(`  npx @cobusgreyling/loop-init . --pattern ${pattern} --tool ${tool} --with-fleet`);
+    console.log('');
+    console.log('Fleet engineering stack ready (fleet-registry.md, fleet-inbox.md)');
 }
 function printMemoryCta(opts) {
-    const { pattern, tool, withMemory, score } = opts;
-    console.log('');
-    if (withMemory) {
-        console.log('Memory engineering stack ready (memory-tiers.md, memory-budget.md)');
+    if (!opts.withMemory)
         return;
-    }
-    const highReady = score !== null && score >= 80;
-    console.log(highReady
-        ? "Next after Loop Ready 80+: version this loop's memory (memory-engineering)"
-        : 'Optional: add memory-engineering for cross-session knowledge');
-    console.log(`  npx @cobusgreyling/loop-init . --pattern ${pattern} --tool ${tool} --with-memory`);
+    console.log('');
+    console.log('Memory engineering stack ready (memory-tiers.md, memory-budget.md)');
 }
 async function exists(p) {
     try {
@@ -424,6 +462,7 @@ const LEDGER_GOAL = {
     'post-merge-cleanup': 'Clean up regressions from recent merges',
     'changelog-drafter': 'Draft accurate release notes',
     'issue-triage': 'Triage the open issue queue',
+    'thin-loop': 'Snapshot open issues and PRs; do not edit code',
 };
 /**
  * Readiness level seeded into loop-ledger.json so the loop-guard skill can
@@ -440,6 +479,7 @@ const LEDGER_LEVEL = {
     'post-merge-cleanup': 'L2',
     'changelog-drafter': 'L1',
     'issue-triage': 'L1',
+    'thin-loop': 'L1',
 };
 /**
  * Fix-capable loops retry actions, so they need a circuit breaker: scaffold the
@@ -592,6 +632,12 @@ function firstLoopCommand(pattern, tool) {
             codex: 'Automation 2h: issue-triage → issue-triage-state.md. Propose only.',
             opencode: `${OPENCODE_RUN} "Run issue-triage. Update issue-triage-state.md. Propose labels only — no auto-apply."`,
         },
+        'thin-loop': {
+            grok: 'Commit .github/workflows/thin-loop.yml. The Action is the loop — no STATE.md, no /loop required.',
+            claude: 'Commit .github/workflows/thin-loop.yml. The Action is the loop — no STATE.md, no /loop required.',
+            codex: 'Commit .github/workflows/thin-loop.yml. The Action is the loop — no STATE.md required.',
+            opencode: 'Commit .github/workflows/thin-loop.yml. The Action is the loop — no STATE.md required.',
+        },
     };
     return cmds[pattern][tool];
 }
@@ -662,16 +708,17 @@ Patterns:
   post-merge-cleanup
   changelog-drafter (new low-risk release notes pattern)
   issue-triage (new low-risk issue queue health companion to daily triage)
+  thin-loop (GitHub Action snapshot — no STATE.md)
 
 Options:
   -p, --pattern     Pattern to scaffold
-  -t, --tool        Tool target (default: grok)
+  -t, --tool        Tool target (default: claude)
   --with-foundry    Also scaffold .foundry/ stack (harness-foundry runtime)
   --with-memory     Also scaffold memory-engineering tiers and budget
   --with-fleet      Also scaffold fleet-engineering registry and inbox
-  --model-provider  Implementer interface provider (default: anthropic; minimax)
+  --model-provider  Implementer interface provider (default: anthropic; minimax, orcarouter)
   --region          MiniMax region when --model-provider minimax (global_en, cn_zh)
-  --model           MiniMax model when --model-provider minimax (MiniMax-M3, MiniMax-M2.7)
+  --model           Provider model when --model-provider minimax/orcarouter (default: MiniMax-M3 / orcarouter/fusion)
   --dry-run         Print actions without copying
   -h, --help        This help
 
@@ -680,18 +727,20 @@ Foundry presets (with --with-foundry):
   fix-capable patterns → implementer
 
 Examples:
-  npx @cobusgreyling/loop-init . --pattern daily-triage --tool grok
-  npx @cobusgreyling/loop-init . --pattern daily-triage --tool grok --with-foundry
+  npx @cobusgreyling/loop-init . --pattern daily-triage --tool claude
+  npx @cobusgreyling/loop-init . --pattern thin-loop --tool claude
+  npx @cobusgreyling/loop-init . --pattern daily-triage --tool claude --with-foundry
   npx @cobusgreyling/loop-init . -p pr-babysitter -t claude --with-foundry
   npx @cobusgreyling/loop-init . -p ci-sweeper -t grok --with-foundry --model-provider minimax
   npx @cobusgreyling/loop-init . -p ci-sweeper -t grok --with-foundry --model-provider minimax --region cn_zh --model MiniMax-M2.7
+  npx @cobusgreyling/loop-init . -p ci-sweeper -t claude --with-foundry --model-provider orcarouter --model orcarouter/auto
   npx @cobusgreyling/loop-init . -p daily-triage -t opencode
   npx @cobusgreyling/loop-init . --with-memory
   npx @cobusgreyling/loop-init . --with-fleet
 `);
         process.exit(0);
     }
-    const { pattern, tool, target, dryRun, withFoundry, withMemory, withFleet, modelProvider, region, model } = args;
+    let { pattern, tool, target, dryRun, withFoundry, withMemory, withFleet, modelProvider, region, model } = args;
     const validPatterns = Object.keys(PATTERN_STARTERS);
     const validTools = Object.keys(TOOL_SUFFIX);
     if (!validPatterns.includes(pattern)) {
@@ -702,7 +751,7 @@ Examples:
         console.error(`Unknown tool: ${tool}. Valid: ${validTools.join(', ')}`);
         process.exit(1);
     }
-    const validProviders = ['anthropic', 'minimax'];
+    const validProviders = ['anthropic', 'minimax', 'orcarouter'];
     if (!validProviders.includes(modelProvider)) {
         console.error(`Unknown model provider: ${modelProvider}. Valid: ${validProviders.join(', ')}`);
         process.exit(1);
@@ -717,9 +766,22 @@ Examples:
             process.exit(1);
         }
     }
+    if (modelProvider === 'orcarouter') {
+        // `model` defaults to the MiniMax default; if the user did not pass
+        // `--model` explicitly, fall back to the OrcaRouter default instead.
+        if (!ORCAROUTER_MODEL_IDS.includes(model)) {
+            if (model === MINIMAX_DEFAULT_MODEL) {
+                model = ORCAROUTER_DEFAULT_MODEL;
+            }
+            else {
+                console.error(`Unknown model: ${model}. Valid: ${ORCAROUTER_MODEL_IDS.join(', ')}`);
+                process.exit(1);
+            }
+        }
+    }
     const targetDir = path.resolve(target);
     const baseStarter = PATTERN_STARTERS[pattern];
-    const suffix = TOOL_SUFFIX[tool];
+    const suffix = TOOL_AGNOSTIC.has(pattern) ? '' : TOOL_SUFFIX[tool];
     const starterName = `${baseStarter}${suffix}`;
     const startersRoot = await resolveBundledOrMonorepo('starters');
     const templatesRoot = await resolveBundledOrMonorepo('templates');
@@ -800,12 +862,23 @@ Examples:
     if (await exists(loopMd)) {
         await copyFile(loopMd, path.join(targetDir, 'LOOP.md'), dryRun);
     }
-    await copyL2Templates(pattern, tool, targetDir, templatesRoot, dryRun);
-    await scaffoldCircuitBreaker(pattern, tool, targetDir, templatesRoot, dryRun);
-    await scaffoldObservability(pattern, tool, targetDir, templatesRoot, dryRun);
-    await scaffoldIntake(pattern, tool, targetDir, templatesRoot, dryRun);
-    await scaffoldConstraints(targetDir, templatesRoot, tool, dryRun);
-    if (tool !== 'opencode' && !dryRun && !(await exists(path.join(targetDir, 'AGENTS.md')))) {
+    const wfSrc = path.join(effectiveStarter, '.github', 'workflows');
+    if (await exists(wfSrc)) {
+        const wfEntries = await readDirNames(wfSrc);
+        for (const entry of wfEntries) {
+            if (!entry.endsWith('.yml') && !entry.endsWith('.yaml'))
+                continue;
+            await copyFile(path.join(wfSrc, entry), path.join(targetDir, '.github', 'workflows', entry), dryRun);
+        }
+    }
+    if (pattern !== 'thin-loop') {
+        await copyL2Templates(pattern, tool, targetDir, templatesRoot, dryRun);
+        await scaffoldCircuitBreaker(pattern, tool, targetDir, templatesRoot, dryRun);
+        await scaffoldObservability(pattern, tool, targetDir, templatesRoot, dryRun);
+        await scaffoldIntake(pattern, tool, targetDir, templatesRoot, dryRun);
+        await scaffoldConstraints(targetDir, templatesRoot, tool, dryRun);
+    }
+    if (tool !== 'opencode' && pattern !== 'thin-loop' && !dryRun && !(await exists(path.join(targetDir, 'AGENTS.md')))) {
         const agentsTemplate = `# AGENTS.md
 
 ## Test commands

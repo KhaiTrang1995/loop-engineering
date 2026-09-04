@@ -2,19 +2,19 @@
 
 Scaffold loop engineering starters into your project by pattern and tool.
 
-**npx @cobusgreyling/loop-init . --pattern daily-triage --tool grok** works immediately.
+**npx @cobusgreyling/loop-init . --pattern daily-triage --tool claude** works immediately.
 
 See [docs/loop-init-validation.md](../../docs/loop-init-validation.md) for a validated pattern × --tool matrix.
 
 ## Install & Run
 
 ```bash
-npx @cobusgreyling/loop-init . --pattern daily-triage --tool grok
+npx @cobusgreyling/loop-init . --pattern daily-triage --tool claude
 npx @cobusgreyling/loop-init . --pattern daily-triage --tool opencode
 npx @cobusgreyling/loop-init . -p pr-babysitter -t claude
 npx @cobusgreyling/loop-init . -p dependency-sweeper --dry-run
 # One-command LE → harness-foundry funnel:
-npx @cobusgreyling/loop-init . --pattern daily-triage --tool grok --with-foundry
+npx @cobusgreyling/loop-init . --pattern daily-triage --tool claude --with-foundry
 ```
 
 See [docs/RELEASE.md](../../docs/RELEASE.md) for npm publish tags. The published package bundles `starters/` and `templates/` from this monorepo.
@@ -40,20 +40,22 @@ Every `loop-init` run prints a Foundry CTA; when Loop Ready is **≥ 80**, the C
 
 ### Interface provider (implementer preset)
 
-The `implementer` preset defaults to the built-in interface primitive. Pass `--model-provider minimax` to emit a `model/minimax` provider primitive instead. The generated stack always carries both regional endpoints and both model options, so you can switch region/model without regenerating:
+The `implementer` preset defaults to the built-in interface primitive. Pass `--model-provider minimax` to emit a `model/minimax` provider primitive instead, or `--model-provider orcarouter` to emit a `model/orcarouter` provider primitive. The generated stack always carries the provider endpoints and model options, so you can switch provider/model without regenerating:
 
 ```bash
 npx @cobusgreyling/loop-init . -p ci-sweeper -t grok --with-foundry --model-provider minimax
 npx @cobusgreyling/loop-init . -p ci-sweeper -t grok --with-foundry --model-provider minimax --region cn_zh --model MiniMax-M2.7
+npx @cobusgreyling/loop-init . -p ci-sweeper -t claude --with-foundry --model-provider orcarouter
+npx @cobusgreyling/loop-init . -p ci-sweeper -t claude --with-foundry --model-provider orcarouter --model orcarouter/auto
 ```
 
 | Flag | Values | Default |
 |------|--------|---------|
-| `--model-provider` | `anthropic`, `minimax` | `anthropic` |
+| `--model-provider` | `anthropic`, `minimax`, `orcarouter` | `anthropic` |
 | `--region` | `global_en`, `cn_zh` | `global_en` |
-| `--model` | `MiniMax-M3`, `MiniMax-M2.7` | `MiniMax-M3` |
+| `--model` | `MiniMax-M3`, `MiniMax-M2.7`, `orcarouter/fusion`, `orcarouter/fusion-flash`, `orcarouter/auto`, `orcarouter/free` | `MiniMax-M3` / `orcarouter/fusion` |
 
-MiniMax model options and both endpoints (`global_en` → `https://api.minimax.io`, `cn_zh` → `https://api.minimaxi.com`) are written into `.foundry/stack.yaml`.
+MiniMax model options and both endpoints (`global_en` → `https://api.minimax.io`, `cn_zh` → `https://api.minimaxi.com`) are written into `.foundry/stack.yaml`. The OrcaRouter provider writes the gateway's OpenAI- and Anthropic-compatible endpoints (`https://api.orcarouter.ai`) plus its routing model options (`orcarouter/fusion`, `orcarouter/fusion-flash`, `orcarouter/auto`, `orcarouter/free`).
 
 ## Patterns
 

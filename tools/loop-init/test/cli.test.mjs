@@ -22,7 +22,35 @@ test('bundle-assets tolerates concurrent rebuilds', async () => {
 test('loop-init --help exits 0', async () => {
   const { stdout } = await exec('node', [CLI, '--help']);
   assert.match(stdout, /changelog-drafter/);
+  assert.match(stdout, /thin-loop/);
   assert.match(stdout, /opencode/);
+  assert.match(stdout, /default: claude/);
+});
+
+test('loop-init default tool is claude', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'loop-init-default-tool-'));
+  try {
+    const { stdout } = await exec('node', [CLI, dir, '--pattern', 'daily-triage']);
+    assert.match(stdout, /daily-triage → .* \(claude\)/);
+    await access(path.join(dir, '.claude', 'skills', 'loop-triage', 'SKILL.md'));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('loop-init thin-loop copies workflow and skips STATE.md', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'loop-init-thin-'));
+  try {
+    const { stdout } = await exec('node', [CLI, dir, '--pattern', 'thin-loop']);
+    assert.match(stdout, /thin-loop/);
+    await access(path.join(dir, '.github', 'workflows', 'thin-loop.yml'));
+    await access(path.join(dir, 'LOOP.md'));
+    await assert.rejects(() => access(path.join(dir, 'STATE.md')));
+    await assert.rejects(() => access(path.join(dir, 'loop-budget.md')));
+    assert.match(stdout, /The Action is the loop/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('loop-init dry-run scaffolds daily-triage', async () => {
@@ -206,12 +234,12 @@ test('loop-init does NOT scaffold circuit breaker for report-only daily-triage',
   }
 });
 
-test('loop-init prints foundry CTA without --with-foundry', async () => {
+test('loop-init does not print foundry CTA without --with-foundry', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'loop-init-cta-'));
   try {
     const { stdout } = await exec('node', [CLI, dir, '--pattern', 'daily-triage', '--tool', 'grok']);
-    assert.match(stdout, /--with-foundry/);
-    assert.match(stdout, /harness-foundry/);
+    assert.doesNotMatch(stdout, /Next after Loop Ready/);
+    assert.doesNotMatch(stdout, /Optional: make this loop a versioned harness/);
     await assert.rejects(() => access(path.join(dir, '.foundry', 'stack.yaml')));
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -351,6 +379,93 @@ test('loop-init --with-foundry anthropic provider is unchanged (default)', async
   }
 });
 
+test('loop-init --with-foundry --model-provider orcarouter emits OrcaRouter provider primitive', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'loop-init-foundry-orcarouter-'));
+  try {
+    const { stdout } = await exec('node', [
+      CLI,
+      dir,
+      '--pattern',
+      'ci-sweeper',
+      '--tool',
+      'grok',
+      '--with-foundry',
+      '--model-provider',
+      'orcarouter',
+    ]);
+    const stack = await readFile(path.join(dir, '.foundry', 'stack.yaml'), 'utf8');
+    assert.match(stack, /primitive: model\/orcarouter/);
+    // default routing model
+    assert.match(stack, /model: orcarouter\/fusion/);
+    // model options table
+    assert.match(stack, /- id: orcarouter\/fusion/);
+    assert.match(stack, /- id: orcarouter\/fusion-flash/);
+    assert.match(stack, /- id: orcarouter\/auto/);
+    assert.match(stack, /- id: orcarouter\/free/);
+    // single global endpoint; both protocol shapes share the gateway base URL
+    assert.match(stack, /https:\/\/api\.orcarouter\.ai\/v1/);
+    assert.match(stack, /anthropic_base_url: https:\/\/api\.orcarouter\.ai\/v1/);
+    assert.doesNotMatch(stack, /model\/anthropic/);
+    assert.doesNotMatch(stack, /model\/minimax/);
+    assert.match(stdout, /preset: implementer/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('loop-init --with-foundry orcarouter --model selects a different routing model', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'loop-init-foundry-orcarouter-model-'));
+  try {
+    await exec('node', [
+      CLI,
+      dir,
+      '--pattern',
+      'ci-sweeper',
+      '--tool',
+      'grok',
+      '--with-foundry',
+      '--model-provider',
+      'orcarouter',
+      '--model',
+      'orcarouter/auto',
+    ]);
+    const stack = await readFile(path.join(dir, '.foundry', 'stack.yaml'), 'utf8');
+    assert.match(stack, /model: orcarouter\/auto/);
+    // all routing model options remain available in config
+    assert.match(stack, /- id: orcarouter\/fusion/);
+    assert.match(stack, /- id: orcarouter\/free/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('loop-init rejects unknown orcarouter model', async () => {
+  await assert.rejects(
+    () =>
+      exec('node', [
+        CLI,
+        '.',
+        '--pattern',
+        'ci-sweeper',
+        '--tool',
+        'grok',
+        '--with-foundry',
+        '--model-provider',
+        'orcarouter',
+        '--model',
+        'not-a-model',
+        '--dry-run',
+      ]),
+    (err) => err.stderr?.includes('Unknown model') || err.message?.includes('Unknown model'),
+  );
+});
+
+test('loop-init --help documents --model-provider orcarouter', async () => {
+  const { stdout } = await exec('node', [CLI, '--help']);
+  assert.match(stdout, /--model-provider/);
+  assert.match(stdout, /orcarouter/);
+});
+
 test('loop-init rejects unknown model provider', async () => {
   await assert.rejects(
     () =>
@@ -399,12 +514,11 @@ test('loop-init --help documents --model-provider minimax', async () => {
   assert.match(stdout, /minimax/);
 });
 
-test('loop-init prints memory CTA without --with-memory', async () => {
+test('loop-init does not print memory CTA without --with-memory', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'loop-init-mem-cta-'));
   try {
     const { stdout } = await exec('node', [CLI, dir, '--pattern', 'daily-triage', '--tool', 'grok']);
-    assert.match(stdout, /--with-memory/);
-    assert.match(stdout, /memory-engineering/);
+    assert.doesNotMatch(stdout, /--with-memory/);
     await assert.rejects(() => access(path.join(dir, 'memory-tiers.md')));
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -439,12 +553,11 @@ test('loop-init --help documents --with-memory', async () => {
   assert.match(stdout, /memory-engineering tiers and budget/);
 });
 
-test('loop-init prints fleet CTA without --with-fleet', async () => {
+test('loop-init does not print fleet CTA without --with-fleet', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'loop-init-fleet-cta-'));
   try {
     const { stdout } = await exec('node', [CLI, dir, '--pattern', 'daily-triage', '--tool', 'grok']);
-    assert.match(stdout, /--with-fleet/);
-    assert.match(stdout, /fleet-engineering/);
+    assert.doesNotMatch(stdout, /--with-fleet/);
     await assert.rejects(() => access(path.join(dir, 'fleet-registry.md')));
   } finally {
     await rm(dir, { recursive: true, force: true });
