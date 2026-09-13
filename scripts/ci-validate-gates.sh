@@ -106,4 +106,25 @@ cd ../mcp-server
 npm ci
 npm test
 
+echo "Building and testing loop-drill…"
+cd ../loop-drill
+npm ci
+npm test
+
+# Dogfood: prove this repo's own gate.yaml and circuit breaker actually fire.
+# Exit 1 means a drill was skipped (an unconfigured guardrail) and is tolerated;
+# exit 2 means a guardrail failed to fire and must fail CI.
+#
+# Written as an explicit if rather than `cmd || [ $? -eq 1 ]`: under `set -e`
+# a failing command on the right of `||` does not exit the shell, so that
+# shorter form silently passes an exit-2 drill.
+echo "Running loop-drill against the reference repo…"
+cd ../..
+drill_status=0
+node tools/loop-drill/dist/cli.js . || drill_status=$?
+if [ "$drill_status" -ge 2 ]; then
+  echo "loop-drill: a guardrail failed to fire (exit $drill_status)" >&2
+  exit "$drill_status"
+fi
+
 echo "validate gates passed ✓"
