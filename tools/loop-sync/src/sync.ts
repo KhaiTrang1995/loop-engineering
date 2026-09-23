@@ -11,6 +11,13 @@
 import { readFile, writeFile, access, mkdir } from 'node:fs/promises';
 import { readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
+import {
+  comparePolicies,
+  extractGateDenylist,
+  extractSafetyDenylist,
+  findUndocumentedLimits,
+  hasDrift,
+} from './policy-drift.js';
 
 export interface DriftReport {
   score: number;           // 0-100 consistency score
@@ -442,6 +449,11 @@ export async function runSync(options: SyncOptions): Promise<DriftReport> {
     }
   }
   
+  // Check gate.yaml ↔ docs/safety.md policy parity. gate.yaml is the
+  // machine-readable twin of safety.md's Path Denylist; if they drift,
+  // loop-gate enforces something other than the documented policy.
+  await checkPolicyDrift(targetDir, issues);
+
   // Scan skills for version information
   const skillsVersions = await scanSkillsDirectory(targetDir);
   
@@ -548,4 +560,85 @@ export function formatReport(report: DriftReport): string {
   }
   
   return lines.join('\n');
+}
+/**
+ * Compare docs/safety.md's Path Denylist against gate.yaml and record any
+ * divergence. Read-only by design: which side is correct is a human call, so
+ * this is never auto-fixed even under --auto-fix.
+ */
+async function checkPolicyDrift(targetDir: string, issues: DriftIssue[]): Promise<void> {
+  const gatePath = path.join(targetDir, 'gate.yaml');
+  const safetyPath = path.join(targetDir, 'docs', 'safety.md');
+
+  const gateRaw = await readFileContent(gatePath);
+  const safetyRaw = await readFileContent(safetyPath);
+
+  // Missing gate.yaml is already reported by the required-files check, and a
+  // project with no docs/safety.md has no prose policy to drift from.
+  if (!gateRaw || !safetyRaw) return;
+
+  const gate = extractGateDenylist(gateRaw);
+  const safety = extractSafetyDenylist(safetyRaw);
+
+  if (!gate) {
+    // loop-gate reports malformed gate files in detail; just point at it.
+    issues.push({
+      type: 'inconsistent',
+      file: 'gate.yaml',
+      message: 'gate.yaml has no readable denylist — cannot verify it matches docs/safety.md',
+      severity: 'warning',
+      suggestion: "Run 'npx @cobusgreyling/loop-gate check --action commit --paths .' to see the parse error",
+    });
+    return;
+  }
+
+  if (!safety) {
+    issues.push({
+      type: 'inconsistent',
+      file: 'docs/safety.md',
+      message: 'docs/safety.md has no "Path Denylist" code block to compare against gate.yaml',
+      severity: 'info',
+      suggestion: 'Document the denylist in docs/safety.md so the enforced policy has a prose twin',
+    });
+    return;
+  }
+
+  const drift = comparePolicies(safety, gate, findUndocumentedLimits(gateRaw, safetyRaw));
+  if (!hasDrift(drift)) return;
+
+  // Documented-but-unenforced is the dangerous direction: readers trust
+  // safety.md while loop-gate silently allows the path.
+  if (drift.missingInGate.length > 0) {
+    issues.push({
+      type: 'inconsistent',
+      file: 'gate.yaml ↔ docs/safety.md',
+      message: `${drift.missingInGate.length} denylist ${plural(drift.missingInGate.length, 'path')} documented in docs/safety.md but not enforced by gate.yaml: ${drift.missingInGate.join(', ')}`,
+      severity: 'error',
+      suggestion: 'Add these entries to gate.yaml\'s denylist, or remove them from docs/safety.md if intentional',
+    });
+  }
+
+  if (drift.missingInDoc.length > 0) {
+    issues.push({
+      type: 'inconsistent',
+      file: 'gate.yaml ↔ docs/safety.md',
+      message: `${drift.missingInDoc.length} denylist ${plural(drift.missingInDoc.length, 'path')} enforced by gate.yaml but undocumented in docs/safety.md: ${drift.missingInDoc.join(', ')}`,
+      severity: 'warning',
+      suggestion: 'Add these entries to the Path Denylist block in docs/safety.md so humans see what is blocked',
+    });
+  }
+
+  if (drift.undocumentedLimits.length > 0) {
+    issues.push({
+      type: 'inconsistent',
+      file: 'gate.yaml ↔ docs/safety.md',
+      message: `gate.yaml sets ${drift.undocumentedLimits.join(', ')} but docs/safety.md never states this limit`,
+      severity: 'info',
+      suggestion: 'Document the limit in docs/safety.md so the escalation threshold is discoverable',
+    });
+  }
+}
+
+function plural(n: number, word: string): string {
+  return n === 1 ? word : `${word}s`;
 }

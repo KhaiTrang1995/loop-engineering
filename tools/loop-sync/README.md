@@ -68,11 +68,25 @@ loop-sync ./my-project --auto-fix
    - State file references
    - Pattern consistency
 
-3. **Skills directory**
+3. **`gate.yaml` ↔ `docs/safety.md` policy parity**
+   - Denylist paths documented in `docs/safety.md` but **not enforced** by `gate.yaml` (error —
+     readers trust the doc while `loop-gate` silently allows the path)
+   - Denylist paths enforced by `gate.yaml` but **undocumented** in `docs/safety.md` (warning)
+   - `gate.yaml` limits such as `maxFiles` that the prose policy never states (info)
+
+   `gate.yaml` calls itself "the machine-readable twin of `docs/safety.md`" and asks you to keep
+   the two in sync by hand. This check makes that invariant mechanical. It is **read-only even
+   under `--auto-fix`**: which side is correct is a human decision, so loop-sync reports the
+   divergence rather than silently rewriting a safety policy.
+
+   Skipped when either file is absent — a project with no `docs/safety.md` has no prose policy
+   to drift from.
+
+4. **Skills directory**
    - Existence of `.claude/skills/`
    - Version information in SKILL.md files
 
-4. **Configuration drift**
+5. **Configuration drift**
    - Missing references
    - Orphaned files
    - Inconsistencies

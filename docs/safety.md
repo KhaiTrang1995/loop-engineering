@@ -31,6 +31,14 @@ loop to have read this file: `loop-gate check --action <type> --paths <changed f
 exits `2` to escalate, `0` to proceed — same convention `loop-context --check`
 already uses, so control scripts chain both.
 
+`gate.yaml` also sets `maxFiles: 10` — a change touching more than 10 files
+escalates regardless of which paths it touches, on the assumption that a loop
+proposing a large diff has lost the plot.
+
+`loop-sync` checks this section against `gate.yaml` on every run and reports any
+divergence, so the prose above and the enforced policy cannot drift apart
+silently. It never rewrites either file: which side is correct is a human call.
+
 ## Auto-Merge Policy
 
 **Default: no auto-merge.**
