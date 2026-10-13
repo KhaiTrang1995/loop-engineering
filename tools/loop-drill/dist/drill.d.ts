@@ -1,7 +1,7 @@
 /**
  * loop-drill — fire drills for loop guardrails.
  *
- * docs/failure-modes.md names ten ways loops fail. Some have mechanical
+ * docs/failure-modes.md names the ways loops fail. Some have mechanical
  * counterparts (loop-gate, loop-context's circuit breaker); loop-audit scores
  * whether those counterparts are *present*. Nothing checked whether they
  * actually fire.
@@ -17,10 +17,10 @@
  * A guardrail is only credited when it passes both.
  */
 import { type GateConfig } from '@cobusgreyling/loop-gate';
-import { type CircuitBreakerConfig } from '@cobusgreyling/loop-context';
+import { type BreakerDecision, type CircuitBreakerConfig, type Ledger } from '@cobusgreyling/loop-context';
 export type DrillOutcome = 'passed' | 'failed' | 'skipped';
 /** Named failure modes from docs/failure-modes.md. */
-export type FailureMode = 'Infinite Fix Loop' | 'Token Burn' | 'Over-Reach (Wrong Scope)' | 'Verifier Theater' | 'Escalation Failure';
+export type FailureMode = 'Infinite Fix Loop' | 'Token Burn' | 'Over-Reach (Wrong Scope)' | 'Verifier Theater' | 'Escalation Failure' | 'Prompt Injection via Untrusted Input';
 export interface DrillResult {
     /** Stable id, e.g. 'gate.denylist'. */
     id: string;
@@ -78,8 +78,16 @@ export declare function runGateDrills(options: GateDrillOptions): DrillResult[];
  * escalated. Escalating for another reason means the rule under test is still
  * unproven — the same standard the gate drills apply to `trigger !==
  * 'denylist'`.
+ *
+ * loop-context throws on a config that would switch a rule off (a similarity
+ * threshold of 95 meant as 95%, say). That is reported as a failed drill, not
+ * a crash: a breaker that refuses to start protects nothing either.
+ *
+ * `check` defaults to loop-context's breaker; tests pass a stand-in to
+ * exercise the trigger-attribution logic against a breaker that misbehaves.
  */
-export declare function runBreakerDrills(config?: CircuitBreakerConfig): DrillResult[];
+export type BreakerCheck = (ledger: Ledger, config: CircuitBreakerConfig) => BreakerDecision;
+export declare function runBreakerDrills(config?: CircuitBreakerConfig, check?: BreakerCheck): DrillResult[];
 export declare function buildReport(results: DrillResult[]): DrillReport;
 /**
  * 0 = every drill passed, 1 = some skipped (guardrail not configured),

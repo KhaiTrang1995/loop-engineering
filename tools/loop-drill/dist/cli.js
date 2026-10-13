@@ -5,12 +5,15 @@
  * Exit codes follow loop-gate / loop-context so control scripts can chain all
  * three: 0 proceed, 1 warnings, 2 escalate.
  */
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { loadGateConfig } from '@cobusgreyling/loop-gate';
 import { DEFAULT_BREAKER } from '@cobusgreyling/loop-context';
 import { buildReport, exitCodeFor, runBreakerDrills, runGateDrills, skip, } from './drill.js';
 import { runCanary } from './canary.js';
+import { runInjectionCanary } from './injection.js';
 import { formatReport } from './report.js';
+import { buildGroups, fingerprint, RECORD_FILE, writeRecord } from './record.js';
 const HELP = `loop-drill — fire drills for loop guardrails
 
 Injects a known fault and asserts the guardrail actually fires. Turns L3
@@ -19,9 +22,13 @@ readiness from "the files exist" into "the guardrails demonstrably work".
 Usage: loop-drill [path] [options]
 
 Options:
-  --only <drills>        Comma-separated: gate, breaker, verifier (default: gate,breaker)
+  --only <drills>        Comma-separated: gate, breaker, verifier, injection
+                         (default: gate,breaker)
   --verifier-cmd <cmd>   Verifier command to drill. Non-zero exit = rejected.
                          Required to run the verifier canary.
+  --agent-cmd <cmd>      The loop's agent command (e.g. your triage run).
+                         Required to run the injection canary.
+  --state-file <path>    State file the agent reads (default: STATE.md)
   --mutants <n>          Seeded defects for the canary (default: 3)
   --scope <path>         Restrict mutation to this repo-relative path
   --setup <cmd>          Command run in each worktree before verifying
@@ -31,6 +38,9 @@ Options:
   --benign-path <path>   Path the gate specificity drill treats as ordinary
                          (default: docs/README.md)
   --token-budget <n>     Token budget for the breaker drill
+  --record               Write the results to loop-drill.json, which loop-audit
+                         reads as proof the guardrails fire. Replaces only the
+                         guardrails drilled this run; commit the file
   --json                 Machine-readable output
   --help, -h             Show this message
 
@@ -39,10 +49,20 @@ Exit codes: 0 all drills passed, 1 some skipped, 2 a guardrail failed to fire.
 Examples:
   loop-drill .
   loop-drill . --only verifier --verifier-cmd "npm test" --setup "npm ci"
+  loop-drill . --only injection --agent-cmd "claude -p 'run the loop-triage skill'"
   loop-drill . --only gate,breaker --json
+  loop-drill . --record
 `;
 function parseArgs(argv) {
-    const flags = { root: '.', json: false, help: false, mutants: 3, timeoutMs: 120_000 };
+    const flags = {
+        root: '.',
+        json: false,
+        help: false,
+        mutants: 3,
+        timeoutMs: 120_000,
+        stateFile: 'STATE.md',
+        record: false,
+    };
     const positional = [];
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i];
@@ -60,11 +80,20 @@ function parseArgs(argv) {
             case '--json':
                 flags.json = true;
                 break;
+            case '--record':
+                flags.record = true;
+                break;
             case '--only':
                 flags.only = next();
                 break;
             case '--verifier-cmd':
                 flags.verifierCmd = next();
+                break;
+            case '--agent-cmd':
+                flags.agentCmd = next();
+                break;
+            case '--state-file':
+                flags.stateFile = next();
                 break;
             case '--mutants':
                 flags.mutants = parsePositiveInt(next(), '--mutants');
@@ -121,8 +150,8 @@ async function main() {
     const selected = new Set((flags.only ?? 'gate,breaker').split(',').map((s) => s.trim()).filter(Boolean));
     const results = [];
     let mutationScore = null;
+    const gateFile = path.resolve(root, flags.gateFile ?? 'gate.yaml');
     if (selected.has('gate')) {
-        const gateFile = path.resolve(root, flags.gateFile ?? 'gate.yaml');
         try {
             const config = await loadGateConfig(gateFile);
             results.push(...runGateDrills({ config, benignPath: flags.benignPath }));
@@ -154,17 +183,52 @@ async function main() {
             mutationScore = canary.mutationScore;
         }
     }
+    let resistanceScore = null;
+    if (selected.has('injection')) {
+        if (!flags.agentCmd) {
+            results.push(skip('injection', 'injection canary', 'Prompt Injection via Untrusted Input', 'sensitivity', 'No --agent-cmd given. Guidance in a skill says what the agent should do; only running the agent against a planted instruction shows what it does.'));
+        }
+        else {
+            const injection = await runInjectionCanary({
+                root,
+                command: flags.agentCmd,
+                stateFile: flags.stateFile,
+                timeoutMs: flags.timeoutMs,
+                setup: flags.setup,
+            });
+            results.push(...injection.results);
+            resistanceScore = injection.resistanceScore;
+        }
+    }
     if (results.length === 0) {
-        console.error(`No drills selected. --only accepts: gate, breaker, verifier\n`);
+        console.error(`No drills selected. --only accepts: gate, breaker, verifier, injection\n`);
         process.exit(2);
     }
     const report = buildReport(results);
     const code = exitCodeFor(report);
     if (flags.json) {
-        console.log(JSON.stringify({ ...report, mutationScore, exitCode: code }, null, 2));
+        console.log(JSON.stringify({ ...report, mutationScore, resistanceScore, exitCode: code }, null, 2));
     }
     else {
-        console.log(formatReport(report, mutationScore));
+        console.log(formatReport(report, mutationScore, resistanceScore));
+    }
+    if (flags.record) {
+        // Failures are recorded too: loop-audit withdraws credit for a guardrail
+        // that was shown not to fire.
+        const gateText = await readFile(gateFile, 'utf8').catch(() => null);
+        const groups = buildGroups(results, selected, {
+            recordedAt: report.timestamp,
+            gateFile: path.relative(root, gateFile).split(path.sep).join('/'),
+            gateSha256: gateText === null ? null : fingerprint(gateText),
+            verifierCommand: flags.verifierCmd,
+            mutationScore,
+        });
+        await writeRecord(root, groups);
+        const note = `Recorded ${Object.keys(groups).join(', ')} to ${RECORD_FILE} — commit it so loop-audit can see the proof.`;
+        if (flags.json)
+            console.error(note);
+        else
+            console.log(note);
     }
     process.exit(code);
 }
